@@ -1,0 +1,4 @@
+gitlab/data/
+gitlab/logs/
+gitlab/config/
+nginx/ssl/
