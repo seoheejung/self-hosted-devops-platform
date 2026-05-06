@@ -73,25 +73,38 @@ Intel N100 기반 저전력 Mini PC 환경에서 성능 최적화 및 안정성 
 ```text
 [ Main PC ]
  ├─ Development
- ├─ GitLab Runner
- ├─ Docker Build
- ├─ Test
- └─ CI Pipeline Execution
+ ├─ Git Push
+ └─ GitHub Repository 관리
 
                 Git Push
                      ↓
 
+[ GitHub ]
+ ├─ Repository
+ ├─ GitHub Actions
+ └─ Secrets
+
+                SSH Deploy
+                     ↓
+
 [ Mini PC - Windows 11 ]
+ ├─ OpenSSH Server
  ├─ Docker Desktop
  ├─ WSL2 Ubuntu
  │
- ├─ GitLab Omnibus
+ ├─ GitLab Omnibus Container
  ├─ Git Repository
  ├─ Container Registry
  ├─ Nginx
  ├─ Prometheus
  ├─ Grafana
  └─ Deployment Target
+
+                이후 전환
+                     ↓
+
+[ Main PC ]
+ └─ GitLab Runner
 ```
 
 ---
@@ -104,6 +117,7 @@ self-hosted-devops-platform
 │  ├─ screenshots/
 │  ├─ architecture.md
 │  ├─ installation.md
+│  ├─ github-actions-deploy.md
 │  ├─ gitlab-runner.md
 │  ├─ monitoring.md
 │  ├─ backup-strategy.md
@@ -148,6 +162,8 @@ self-hosted-devops-platform
 │  └─ logs/
 │
 ├─ .github/
+│  ├─ workflows/
+│  │  └─ deploy-gitlab.yml
 │  └─ pull_request_template.md
 │
 ├─ .gitignore
@@ -198,9 +214,10 @@ feature/xxx
 
 | 문서 | 내용 |
 |---|---|
-| [architecture.md](docs/architecture.md) | 전체 아키텍처 및 구성 요소 설명 |
-| [installation.md](docs/installation.md) | Windows 11, WSL2, Docker Desktop, GitLab 설치 절차 |
-| [gitlab-runner.md](docs/gitlab-runner.md) | Main PC 기반 GitLab Runner 등록 및 운영 방식 |
+| [architecture.md](docs/architecture.md) | Main PC, GitHub Actions, Mini PC, GitLab Runner로 구성된 전체 아키텍처 설명 |
+| [installation.md](docs/installation.md) | Windows 11, WSL2, Docker Desktop, GitLab Container 설치 절차 |
+| [github-actions-deploy.md](docs/github-actions-deploy.md) | GitHub Actions를 통한 Mini PC 초기 배포 자동화 구성 |
+| [gitlab-runner.md](docs/gitlab-runner.md) | GitLab 구축 이후 Main PC 기반 GitLab Runner 등록 및 운영 방식 |
 | [monitoring.md](docs/monitoring.md) | Prometheus/Grafana 기반 모니터링 구성 |
 | [backup-strategy.md](docs/backup-strategy.md) | GitLab 데이터 백업 및 복구 전략 |
 | [troubleshooting.md](docs/troubleshooting.md) | 구축 및 운영 중 발생한 문제와 해결 기록 |
@@ -217,31 +234,51 @@ feature/xxx
 - WSL2 Ubuntu 설치
 - Docker Desktop 설치 및 WSL2 연동
 - Docker 리소스 제한 설정
-- 고정 IP 또는 내부 접근 주소 정리
+- Mini PC 고정 IP 또는 내부 접근 주소 정리
+- Main PC에서 Mini PC로 SSH 접속 확인
 
 #### 구현 목표
 - Windows 11 + WSL2 기반 Container 환경 구성
 - Docker Desktop 리소스 최적화
+- Main PC에서 Mini PC 원격 제어 가능 상태 확보
 
 ---
 
-### Phase 2. GitLab 서버 구축
+### Phase 2. GitHub Actions 기반 초기 배포 구성
+
+#### 작업 내용
+- Mini PC OpenSSH Server 활성화
+- GitHub Actions용 SSH Key 생성
+- GitHub Repository Secrets 등록
+- GitHub Actions 배포 Workflow 작성
+- GitHub Actions에서 Mini PC SSH 접속 검증
+
+#### 구현 목표
+- Git Push 이후 Mini PC에 자동 적용되는 초기 배포 경로 확보
+- GitLab 구축 전 단계에서 GitHub Actions 기반 자동화 구성
+- 수동 복사/수동 실행 없이 원격 배포 가능한 구조 확보
+
+---
+
+### Phase 3. GitLab 서버 구축
 
 #### 작업 내용
 - GitLab Omnibus Container 구성
 - Docker Compose 작성
 - GitLab Volume 구성
+- GitHub Actions를 통한 Docker Compose 실행
 - 초기 관리자 계정 설정
-- Git Repository 생성
+- GitLab Web UI 접근 확인
 
 #### 구현 목표
 - GitLab 기반 Self-hosted SCM 구축
 - Persistent Volume 기반 데이터 유지
-- 사용자 및 권한 관리
+- Main PC 브라우저에서 Mini PC GitLab Web UI 접근 가능
+- 사용자 및 권한 관리 기반 확보
 
 ---
 
-### Phase 3. GitLab Runner 분리 구성
+### Phase 4. GitLab Runner 분리 구성
 
 #### 작업 내용
 - Main PC에 GitLab Runner 설치
@@ -257,16 +294,17 @@ feature/xxx
 
 ---
 
-### Phase 4. CI/CD Pipeline 구성
+### Phase 5. CI/CD Pipeline 구성
 
 #### Pipeline Flow
 
 ```text
 Git Push
+ → GitLab Pipeline
  → Build
  → Test
  → Docker Build
- → Deploy
+ → Mini PC Deploy
 ```
 
 #### 작업 내용
@@ -285,7 +323,7 @@ Git Push
 
 ---
 
-### Phase 5. Reverse Proxy 및 SSL 구성
+### Phase 6. Reverse Proxy 및 SSL 구성
 
 #### 작업 내용
 - Nginx Reverse Proxy 구성
@@ -299,7 +337,7 @@ Git Push
 
 ---
 
-### Phase 6. Monitoring 구성
+### Phase 7. Monitoring 구성
 
 #### 작업 내용
 - Prometheus 구성
@@ -323,7 +361,7 @@ Git Push
 
 ---
 
-### Phase 7. 운영 문서화
+### Phase 8. 운영 문서화
 
 #### 작업 내용
 - 설치 절차 문서화
