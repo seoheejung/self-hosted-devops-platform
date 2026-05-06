@@ -42,7 +42,7 @@ Intel N100 기반 저전력 Mini PC 환경에서 성능 최적화 및 안정성 
 
 ## 프로젝트 환경
 
-### Hardware
+### 하드웨어
 
 | 항목 | 내용 |
 |---|---|
@@ -54,7 +54,7 @@ Intel N100 기반 저전력 Mini PC 환경에서 성능 최적화 및 안정성 
 
 ---
 
-### Software Stack
+### 기술 스택
 
 | 영역 | 기술 |
 |---|---|
@@ -68,7 +68,7 @@ Intel N100 기반 저전력 Mini PC 환경에서 성능 최적화 및 안정성 
 
 ---
 
-## Architecture
+## 아키텍처
 
 ```text
 [ Main PC ]
@@ -96,7 +96,7 @@ Intel N100 기반 저전력 Mini PC 환경에서 성능 최적화 및 안정성 
 
 ---
 
-## Repository Structure
+## 디렉토리 구조
 ```
 self-hosted-devops-platform
 │
@@ -147,89 +147,121 @@ self-hosted-devops-platform
 │  ├─ data/
 │  └─ logs/
 │
+├─ .github/
+│  └─ pull_request_template.md
+│
 ├─ .gitignore
 └─ README.md
 ```
 
 ---
 
-## Roadmap
+## 변경 관리 프로세스 (Git Workflow)
+
+### PR 사용 목적
+- 인프라 변경으로 인한 장애 리스크 통제 목적
+- 협업 도구가 아닌 변경 검증 게이트로 사용
+- 코드 리뷰가 아닌 self-review 강제 수단
+- GitLab, Runner, Nginx, Monitoring 설정 변경은 전체 DevOps 플랫폼에 영향을 주므로 변경 단위 분리 및 사전 검증 필요
+
+### 작업 흐름
+
+```bash
+git checkout -b feature/xxx
+git add .
+git commit -m "feat: xxx"
+git push origin feature/xxx
+```
+1. 기능 단위 브랜치 생성 후 작업 수행
+2. 원격 저장소로 push
+3. PR 생성 (`Compare & pull request`)
+4. 체크리스트 기반 검증
+5. 검증 완료 후 main 브랜치로 merge
+6. CI/CD를 통한 배포 진행
+
+### 검증 방식
+- 체크리스트 기반 self-review
+- 모든 PR 동일 기준 적용
+- `.github/pull_request_template.md`를 통해 자동 적용
+
+### 브랜치 전략
+```
+feature/xxx
+```
+- 기능 단위로 브랜치 분리
+- main 브랜치는 항상 배포 가능한 상태 유지
+- main 브랜치 직접 커밋 금지
+
+---
+
+## 문서
+
+| 문서 | 내용 |
+|---|---|
+| [architecture.md](docs/architecture.md) | 전체 아키텍처 및 구성 요소 설명 |
+| [installation.md](docs/installation.md) | Windows 11, WSL2, Docker Desktop, GitLab 설치 절차 |
+| [gitlab-runner.md](docs/gitlab-runner.md) | Main PC 기반 GitLab Runner 등록 및 운영 방식 |
+| [monitoring.md](docs/monitoring.md) | Prometheus/Grafana 기반 모니터링 구성 |
+| [backup-strategy.md](docs/backup-strategy.md) | GitLab 데이터 백업 및 복구 전략 |
+| [troubleshooting.md](docs/troubleshooting.md) | 구축 및 운영 중 발생한 문제와 해결 기록 |
+| [optimization.md](docs/optimization.md) | GitLab 및 Docker Desktop 성능 튜닝 기록 |
+
+---
+
+## 구현 단계
 
 ### Phase 1. Mini PC 기본 환경 구성
 
+#### 작업 내용
 - Windows 11 환경 정리
 - WSL2 Ubuntu 설치
 - Docker Desktop 설치 및 WSL2 연동
 - Docker 리소스 제한 설정
 - 고정 IP 또는 내부 접근 주소 정리
 
+#### 구현 목표
+- Windows 11 + WSL2 기반 Container 환경 구성
+- Docker Desktop 리소스 최적화
+
+---
+
 ### Phase 2. GitLab 서버 구축
 
+#### 작업 내용
 - GitLab Omnibus Container 구성
 - Docker Compose 작성
 - GitLab Volume 구성
 - 초기 관리자 계정 설정
 - Git Repository 생성
 
+#### 구현 목표
+- GitLab 기반 Self-hosted SCM 구축
+- Persistent Volume 기반 데이터 유지
+- 사용자 및 권한 관리
+
+---
+
 ### Phase 3. GitLab Runner 분리 구성
 
+#### 작업 내용
 - Main PC에 GitLab Runner 설치
 - GitLab Runner 등록
 - Docker Executor 설정
 - Runner Tag 설정
 - 테스트 Pipeline 실행
 
-### Phase 4. CI/CD Pipeline 구성
-
-- Build Job 구성
-- Test Job 구성
-- Docker Image Build 구성
-- Mini PC 배포 Job 구성
-- 배포 결과 검증
-
-### Phase 5. Reverse Proxy 및 SSL 구성
-
-- Nginx Reverse Proxy 구성
-- GitLab 접근 도메인 또는 로컬 DNS 구성
-- HTTPS 적용
-- 인증서 갱신 방식 정리
-
-### Phase 6. Monitoring 구성
-
-- Prometheus 구성
-- Grafana 구성
-- Docker Container 리소스 수집
-- GitLab 상태 수집
-- Dashboard 작성
-
-### Phase 7. 운영 문서화
-
-- 설치 절차 문서화
-- 백업/복구 절차 문서화
-- 장애 대응 절차 문서화
-- 성능 튜닝 결과 정리
+#### 구현 목표
+- Main PC 기반 Runner 분리 구성
+- Docker Executor 기반 Pipeline 실행
+- CI Job 분산 처리
 
 ---
 
-## 구현 기능
+### Phase 4. CI/CD Pipeline 구성
 
-### GitLab 구축
-- GitLab Omnibus Container 구성
-- Docker Compose 기반 운영
-- Git Repository 관리
-- 사용자 및 권한 관리
-- Persistent Volume 구성
+#### Pipeline Flow
 
-### GitLab Runner 구축
-
-- Main PC 기반 Runner 분리 구성
-- Docker Executor 기반 Pipeline 실행
-- Runner Tag 분리
-- CI Job 분산 처리
-
-### CI/CD Pipeline 구성
-
-```
+```text
 Git Push
  → Build
  → Test
@@ -237,18 +269,46 @@ Git Push
  → Deploy
 ```
 
-#### 구현 항목
+#### 작업 내용
+- Build Job 구성
+- Test Job 구성
+- Docker Image Build 구성
+- Mini PC 배포 Job 구성
+- 배포 결과 검증
 
+#### 구현 목표
 - 자동 Build
 - 테스트 자동화
 - Docker Image Build
 - 자동 Deploy
 - Deploy 결과 검증
 
-### Monitoring
+---
+
+### Phase 5. Reverse Proxy 및 SSL 구성
+
+#### 작업 내용
+- Nginx Reverse Proxy 구성
+- GitLab 접근 도메인 또는 로컬 DNS 구성
+- HTTPS 적용
+- 인증서 갱신 방식 정리
+
+#### 구현 목표
+- HTTPS 기반 접근 구성
+- Reverse Proxy 기반 서비스 운영
+
+---
+
+### Phase 6. Monitoring 구성
+
+#### 작업 내용
+- Prometheus 구성
+- Grafana 구성
+- Docker Container 리소스 수집
+- GitLab 상태 수집
+- Dashboard 작성
 
 #### 수집 대상
-
 - Windows Host 리소스
 - WSL2 Ubuntu 리소스
 - Docker Container 리소스
@@ -256,11 +316,24 @@ Git Push
 - GitLab Runner 상태
 - Nginx 상태
 
-#### 시각화
-
+#### 구현 목표
 - Grafana Dashboard 구성
 - Resource Monitoring
-- Alert 기준 설계 예정
+- Alert 기준 설계
 
 ---
 
+### Phase 7. 운영 문서화
+
+#### 작업 내용
+- 설치 절차 문서화
+- 백업/복구 절차 문서화
+- 장애 대응 절차 문서화
+- 성능 튜닝 결과 정리
+
+#### 구현 목표
+- 운영 문서 표준화
+- 장애 대응 절차 확보
+- 성능 최적화 기록 관리
+
+---
