@@ -36,7 +36,8 @@ services:
         postgresql['shared_buffers'] = "256MB"
 
     # GitLab 데이터 영속화 볼륨
+    # GitHub Actions workspace가 아니라 Mini PC WSL2 내부 고정 경로 사용
     volumes:
-      - ../../gitlab/config:/etc/gitlab        # GitLab 설정 파일
-      - ../../gitlab/logs:/var/log/gitlab      # GitLab 로그 파일
-      - ../../gitlab/data:/var/opt/gitlab      # GitLab Repository, DB, 업로드 데이터
+      - /home/gali/gitlab/config:/etc/gitlab      # GitLab 설정 파일
+      - /home/gali/gitlab/logs:/var/log/gitlab    # GitLab 로그 파일
+      - /home/gali/gitlab/data:/var/opt/gitlab    # GitLab Repository, DB, 업로드 데이터
