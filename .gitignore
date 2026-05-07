@@ -65,10 +65,14 @@ backups/
 # =========================
 # GitLab runtime
 # =========================
-gitlab/data/
-gitlab/logs/
-gitlab/config/
-gitlab/tmp/
+gitlab/data/*
+gitlab/logs/*
+gitlab/config/*
+gitlab/tmp/*
+
+!gitlab/data/.gitkeep
+!gitlab/logs/.gitkeep
+!gitlab/config/.gitkeep
 
 # =========================
 # Nginx SSL
