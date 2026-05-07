@@ -1,7 +1,6 @@
 # GitHub Actions Deploy
 
-> GitLab 서버가 아직 구축되지 않은 초기 단계에서 GitHub Actions를 사용하여 
-> Mini PC에 GitLab Container를 자동 배포하고, GitHub Repository 변경 사항을 SSH 기반으로 Mini PC에 반영한다.
+> GitLab 서버가 아직 구축되지 않은 초기 단계에서 GitHub Actions와 Mini PC WSL2 Ubuntu의 self-hosted runner를 사용하여 GitLab Container를 자동 배포한다.
 
 ---
 
@@ -9,165 +8,166 @@
 
 ```text
 Main PC
- └─ Git Push
+ └─ Git Push / PR Merge
         ↓
 
 GitHub Repository
  └─ GitHub Actions
         ↓
 
-SSH Deploy
+Mini PC self-hosted runner
+ └─ Job 수신
         ↓
 
-Mini PC
- ├─ Docker Desktop
- ├─ WSL2 Ubuntu
- └─ GitLab Container
+Mini PC WSL2 Ubuntu
+ ├─ Docker Compose 실행
+ ├─ GitLab runtime volume 생성
+ └─ GitLab Container 실행
 ```
+
+---
+
+## 구조 판단
+
+### 실패한 방식
+
+```
+GitHub-hosted runner
+ └─ Mini PC 내부망 IP로 SSH 접속
+        ↓
+실패: 내부망 사설 IP 접근 불가
+```
+- GitHub-hosted runner는 GitHub 클라우드에서 실행되므로 내부망 사설 IP의 Mini PC에 직접 SSH 접속할 수 없다.
+```
+dial tcp <MINI_PC_IP>:22: i/o timeout
+```
+
+### 적용한 방식
+
+```
+GitHub Actions
+ └─ Mini PC self-hosted runner
+        ↓
+Mini PC WSL2 Ubuntu 내부에서 Docker Compose 실행
+```
+
+> GitHub가 Mini PC로 inbound SSH 접속하는 구조가 아니라, Mini PC의 runner가 GitHub Actions job을 outbound로 받아 실행한다.
 
 ---
 
 ## 전제 조건
 
 - Main PC에서 GitHub Repository로 push 가능
-- Mini PC에 OpenSSH Server 활성화
-- Main PC에서 Mini PC로 SSH 접속 가능
-- Mini PC에서 Docker 명령어 사용 가능
-- Mini PC에 프로젝트 작업 디렉토리 존재
+- Mini PC에 WSL2 Ubuntu 구성 완료
+- Mini PC에서 Docker Desktop 실행 가능
+- Docker Desktop WSL Integration 활성화
+- Mini PC WSL2 Ubuntu에서 Docker 명령어 사용 가능
+- Mini PC WSL2 Ubuntu에 GitHub self-hosted runner 등록 완료
+- GitHub Repository Secrets에 `MINI_PC_HOST` 등록 완료
 
 ---
 
-
-Main PC
- └─ Git Push
-        ↓
-
-GitHub Repository
- └─ GitHub Actions
-        ↓
-
-SSH Deploy
-        ↓
-
-Mini PC
- ├─ Docker Desktop
- ├─ WSL2 Ubuntu
- └─ GitLab Container
-```
-
----
-
-## 전제 조건
-
-- Main PC에서 GitHub Repository로 push 가능
-- Mini PC에 OpenSSH Server 활성화
-- Main PC에서 Mini PC로 SSH 접속 가능
-- Mini PC에서 Docker 명령어 사용 가능
-- Mini PC에 프로젝트 작업 디렉토리 존재
-
----
 
 ## 작업 진행
 
-### 1. Mini PC SSH 접속 확인
-
-#### Main PC에서 실행
-
-```bash
-ssh <WINDOWS_USER>@<MINI_PC_IP>
-```
-
-#### 예시
-
-```bash
-ssh sehan@192.168.0.50
-```
-
-#### 정상 기준
-
-```text
-Mini PC에 SSH 접속 성공
-```
-
----
-
-### 2. SSH Key 생성
-
-#### Main PC에서 실행
-
-```bash
-ssh-keygen -t ed25519 -C "github-actions-mini-pc" -f ~/.ssh/github_actions_mini_pc
-```
-
-#### 생성 파일
-
-```text
-~/.ssh/github_actions_mini_pc
-~/.ssh/github_actions_mini_pc.pub
-```
-
-| 파일 | 용도 |
-|---|---|
-| `github_actions_mini_pc` | GitHub Secrets에 등록할 Private Key |
-| `github_actions_mini_pc.pub` | Mini PC에 등록할 Public Key |
-
----
-
-### 3. Public Key를 Mini PC에 등록
-
-#### Main PC에서 Public Key 확인
-
-```bash
-cat ~/.ssh/github_actions_mini_pc.pub
-```
-
-출력된 내용을 복사.
+### 1. Mini PC WSL2 Ubuntu 상태 확인
 
 #### Mini PC에서 실행
-
-```powershell
-mkdir $env:USERPROFILE\.ssh -Force
-
-notepad $env:USERPROFILE\.ssh\authorized_keys
 ```
-
-`authorized_keys` 파일에 Public Key 내용을 붙여넣고 저장.
-
-#### 권한 설정
-
-```powershell
-icacls $env:USERPROFILE\.ssh /inheritance:r
-
-icacls $env:USERPROFILE\.ssh /grant "$env:USERNAME:F"
-
-icacls $env:USERPROFILE\.ssh\authorized_keys /inheritance:r
-
-icacls $env:USERPROFILE\.ssh\authorized_keys /grant "$env:USERNAME:F"
-```
-
----
-
-### 4. SSH Key 기반 접속 확인
-
-#### Main PC에서 실행
-
-```bash
-ssh -i ~/.ssh/github_actions_mini_pc <WINDOWS_USER>@<MINI_PC_IP>
+wsl -l -v
 ```
 
 #### 정상 기준
+```
+NAME              STATE           VERSION
+* Ubuntu-22.04     Running         2
+  docker-desktop   Running         2
+```
 
-```text
-비밀번호 없이 Mini PC에 SSH 접속 성공
+#### WSL Ubuntu로 접속
+
+```
+wsl -d Ubuntu-22.04
 ```
 
 ---
 
-### 5. GitHub Secrets 등록
 
-#### GitHub Repository 이동
+### 2. Docker 사용 가능 여부 확인
 
-```text
+#### Mini PC WSL2 Ubuntu에서 실행
+```
+docker version
+docker compose version
+```
+
+#### 정상 기준
+- Docker Client / Server 정보 출력
+- Docker Compose version 출력
+
+---
+
+### 3. GitHub self-hosted runner 설치
+
+#### GitHub Repository 화면에서 runner 등록 명령 확인
+```
+Settings
+ → Actions
+ → Runners
+ → New self-hosted runner
+ → Linux
+ → x64
+```
+
+#### Mini PC WSL2 Ubuntu에서 실행
+```
+mkdir -p ~/actions-runner
+cd ~/actions-runner
+```
+
+#### GitHub 화면에서 제공하는 runner 다운로드 명령 실행
+```
+curl -o actions-runner-linux-x64-<VERSION>.tar.gz -L <GITHUB_RUNNER_DOWNLOAD_URL>
+tar xzf ./actions-runner-linux-x64-<VERSION>.tar.gz
+```
+
+#### Runner 등록
+```
+./config.sh --url <GITHUB_REPO_URL> --token <GITHUB_RUNNER_TOKEN>
+```
+
+#### 주의
+- `<GITHUB_RUNNER_TOKEN>`은 GitHub 화면에서 발급되는 값을 사용한다.
+- Runner token은 문서나 Git에 저장하지 않는다.
+- Runner token은 노출되면 새로 발급받는다.
+
+
+#### Runner 실행
+```
+./run.sh
+```
+
+#### 정상 기준
+- √ Connected to GitHub
+- Listening for Jobs
+
+#### 마무리
+- GitHub Repository의 runner 화면에서 상태 확인
+```
+Settings
+ → Actions
+ → Runners
+```
+
+#### 정상 기준
+- Status: Idle 또는 Online
+- Labels: self-hosted, Linux, X64
+
+---
+
+### 4. GitHub Secrets 등록
+
+```
 Settings
  → Secrets and variables
  → Actions
@@ -175,252 +175,208 @@ Settings
 ```
 
 #### 등록 값
-
 | Secret | 값 |
-|---|---|
+| --- | --- |
 | `MINI_PC_HOST` | Mini PC 내부 IP |
-| `MINI_PC_USER` | Mini PC SSH 사용자명 |
-| `MINI_PC_SSH_KEY` | `github_actions_mini_pc` Private Key 전체 내용 |
 
-#### Private Key 확인
-
-```bash
-cat ~/.ssh/github_actions_mini_pc
-```
-
-> 주의:
-> Private Key는 Git에 절대 커밋하지 않는다.
-> GitHub Secrets에만 등록한다.
+> `MINI_PC_HOST`는 GitLab `external_url` 구성에 사용한다.
 
 ---
 
-### 6. Mini PC 작업 디렉토리 준비
+### 5. GitLab runtime volume 경로 준비
 
-#### Mini PC에서 실행
+> GitLab runtime 데이터는 GitHub Actions workspace가 아니라 Mini PC WSL2 Ubuntu 내부 고정 경로에 저장한다.
 
-```bash
-mkdir -p ~/projects/self-hosted-devops-platform
+```
+mkdir -p /home/<USER>/gitlab/config
+mkdir -p /home/<USER>/gitlab/data
+mkdir -p /home/<USER>/gitlab/logs
 ```
 
-#### 권장 경로
+#### 경로 역할
 
-```text
-/home/<USER>/projects/self-hosted-devops-platform
+| 경로 | 역할 |
+| --- | --- |
+| `/home/<USER>/gitlab/config` | GitLab 설정 파일 |
+| `/home/<USER>/gitlab/data` | Repository, DB, 업로드 파일 등 실제 데이터 |
+| `/home/<USER>/gitlab/logs` | GitLab 로그 |
+
+---
+
+### 6. GitHub Actions Workflow 작성
+
+- 파일: `.github/workflows/deploy-gitlab.yml`
+
+Workflow는 `main` 브랜치에 GitLab Compose 파일 또는 배포 Workflow 파일이 반영될 때 실행된다.
+
+#### 실행 기준
+
+- 실행 브랜치: `main`
+- 실행 조건:
+    - `infra/compose/docker-compose.gitlab.yml` 변경
+    - `.github/workflows/deploy-gitlab.yml` 변경
+- 실행 환경:
+    - GitHub-hosted runner가 아닌 Mini PC WSL2 Ubuntu의 self-hosted runner
+- 실행 방식:
+    - `actions/checkout@v4`로 Repository checkout
+    - GitLab runtime volume 디렉토리 생성
+    - Docker credential config 초기화
+    - Docker Compose로 GitLab Container 실행
+
+#### 핵심 설정
+
+```
+runs-on: self-hosted
+```
+- `runs-on: self-hosted`를 사용하므로 GitHub Actions job은 Mini PC WSL2 Ubuntu에 등록된 runner에서 실행된다.
+- GitHub-hosted runner는 내부망 사설 IP의 Mini PC에 직접 접근할 수 없기 때문에 사용하지 않는다.
+
+#### 배포 시 수행 작업
+1. Repository checkout
+2. `/home/<USER>/gitlab/config` 생성
+3. `/home/<USER>/gitlab/data` 생성
+4. `/home/<USER>/gitlab/logs` 생성
+5. Docker credential config 초기화
+6. docker compose up -d 실행
+7. docker ps로 GitLab Container 상태 확인
+
+#### GitHub Secrets 사용
+
+| Secret | 용도 |
+| --- | --- |
+| `MINI_PC_HOST` | GitLab `external_url`에 사용할 Mini PC 내부 IP |
+
+`MINI_PC_HOST`는 Docker Compose 실행 시 환경변수로 주입된다.
+
+Compose 파일에서는 아래 형태로 사용한다.
+
+```
+external_url 'http://${MINI_PC_HOST}:8080'
 ```
 
 ---
 
-### 7. GitHub Actions Workflow 작성
+### 7. GitHub Actions 실행 확인
 
-#### 파일
-
-```text
-.github/workflows/deploy-gitlab.yml
 ```
-
-#### 구성 내용
-
-- GitHub Actions 기반 Workflow 구성
-- Git Push 시 Workflow 자동 실행
-- GitHub Secrets 기반 SSH 인증 사용
-- Mini PC로 compose 파일 복사
-- Mini PC에서 Docker Compose 실행
-- GitLab Container 상태 확인
-
-#### 사용 기술
-
-- `appleboy/scp-action`
-- `appleboy/ssh-action`
-
----
-
-### 8. Workflow 실행 조건
-
-현재 Workflow는 `main` 브랜치에 push될 때 실행된다.
-
-#### 실행 조건
-
-```yaml
-on:
-  push:
-    branches:
-      - main
-```
-
-#### 파일 변경 조건
-
-```yaml
-paths:
-  - "infra/compose/docker-compose.gitlab.yml"
-  - ".github/workflows/deploy-gitlab.yml"
-```
-
-즉, 해당 파일이 변경되어 `main`에 반영될 때만 배포가 실행된다.
-
----
-
-### 9. 브랜치 작업 및 PR
-
-#### 작업 브랜치 생성
-
-```bash
-git checkout -b feature/gitlab-initial-setup
-```
-
-#### 변경 사항 커밋
-
-```bash
-git add .
-
-git commit -m "feat: GitLab 초기 실행 환경 구성"
-```
-
-#### 원격 브랜치 push
-
-```bash
-git push origin feature/gitlab-initial-setup
-```
-
-GitHub에서 PR 생성 후 `main`으로 merge한다.
-
----
-
-### 10. GitHub Actions 실행 확인
-
-#### GitHub Repository
-
-```text
 Actions
  → Deploy GitLab to Mini PC
 ```
 
 #### 정상 기준
-
 - Workflow 실행됨
+- self-hosted runner에서 job 수신
 - Checkout 성공
-- SSH 접속 성공
+- GitLab volume 디렉토리 생성 성공
+- Docker credential config 초기화 성공
 - Docker Compose 실행 성공
 - GitLab Container Up 상태 확인
 
 ---
 
-### 11. Mini PC 상태 확인
+### 8. Mini PC 상태 확인
 
-#### Container 상태 확인
-
-```bash
+#### gitlab container Up 확인
+```
 docker ps
 ```
 
-#### 정상 기준
-
-```text
-gitlab container Up
-```
-
 #### GitLab 로그 확인
-
-```bash
+```
 docker logs -f gitlab
 ```
 
 #### GitLab 서비스 상태 확인
 
-```bash
+```
 docker exec -it gitlab gitlab-ctl status
 ```
 
----
+#### Main PC에서 GitLab Web UI 접근
 
-### 12. Main PC에서 GitLab Web UI 접근
-
-#### Main PC 브라우저
-
-```text
+```
 http://<MINI_PC_IP>:8080
 ```
 
-#### 예시
-
-```text
-http://192.168.0.50:8080
-```
-
-#### 정상 기준
-
-```text
-GitLab 로그인 페이지 표시
-```
-
 ---
 
-### 13. 초기 root 비밀번호 확인
+### 9. 초기 root 비밀번호 확인
 
-#### Mini PC에서 실행
-
-```bash
+#### Mini PC WSL2 Ubuntu에서 실행
+```
 docker exec -it gitlab cat /etc/gitlab/initial_root_password
 ```
 
 #### 로그인 정보
 
-```text
+```
 Username: root
 Password: initial_root_password 파일 내용
 ```
 
-> 주의:
-> initial_root_password 파일은 일정 시간이 지나면 삭제될 수 있으므로 초기 실행 후 바로 확인한다.
-
----
-
-## 완료 기준
-
-- [ ] Main PC에서 Mini PC로 SSH Key 기반 접속 가능
-- [ ] GitHub Secrets 등록 완료
-- [ ] GitHub Actions Workflow 작성 완료
-- [ ] GitHub Actions에서 Mini PC SSH 접속 성공
-- [ ] GitHub Actions에서 Docker Compose 실행 성공
-- [ ] GitLab Container 정상 실행
-- [ ] Main PC에서 GitLab Web UI 접근 가능
-- [ ] root 초기 비밀번호 확인 가능
-- [ ] GitLab Web UI 로그인 가능
+> 주의: initial_root_password 파일은 일정 시간이 지나면 삭제될 수 있으므로 초기 실행 후 바로 확인한다.
 
 ---
 
 ## 트러블슈팅
 
-### GitHub Actions에서 SSH 접속 실패
+### GitHub-hosted runner에서 Mini PC SSH 접속 실패
+
+#### 증상
+
+```
+dial tcp <MINI_PC_IP>:22: i/o timeout
+```
+
+#### 원인
+- GitHub-hosted runner는 GitHub 클라우드에서 실행되므로 내부망 사설 IP의 Mini PC에 직접 접근할 수 없다.
+
+#### 해결
+- Mini PC WSL2 Ubuntu에 GitHub self-hosted runner를 등록하고 Workflow를 다음과 같이 설정한다.
+
+```
+runs-on: self-hosted
+```
+
+### Docker credential helper 오류
+
+#### 증상
+
+```
+error getting credentials - err: exit status 1, out: `A specified logon session does not exist. It may already have been terminated.`
+```
+
+#### 원인
+- WSL2의 Docker config가 Docker Desktop credential helper를 사용하도록 설정되어 있고, self-hosted runner 세션에서 해당 credential helper 접근이 실패한다.
+
+- 문제 설정 예시
+```
+{
+  "credsStore": "desktop.exe"
+}
+```
+
+#### 해결
+
+```
+mkdir -p ~/.docker
+
+cat > ~/.docker/config.json <<'EOF'
+{
+  "auths": {}
+}
+EOF
+```
+
+### Docker Compose 실행 실패
 
 #### 확인 항목
 
-- `MINI_PC_HOST` 값 확인
-- `MINI_PC_USER` 값 확인
-- `MINI_PC_SSH_KEY` 값 확인
-- Mini PC OpenSSH Server 실행 여부 확인
-- Mini PC 방화벽 22번 포트 허용 여부 확인
-
----
-
-### SCP 복사 실패
-
-#### 확인 항목
-
-- target 경로 존재 여부 확인
-- SSH 사용자 권한 확인
-- GitHub Actions 로그에서 실제 복사 경로 확인
-
----
-
-### Docker 명령어 실패
-
-#### 확인 항목
-
-- Mini PC에서 Docker Desktop 실행 여부 확인
-- SSH 세션에서 `docker version` 실행 가능 여부 확인
+- Docker Desktop 실행 여부 확인
 - Docker Desktop WSL Integration 활성화 여부 확인
-
----
+- Mini PC WSL2 Ubuntu에서 `docker version` 실행 가능 여부 확인
+- `MINI_PC_HOST` Secret 등록 여부 확인
+- `docker-compose.gitlab.yml`의 volume 경로 확인
 
 ### GitLab Web UI 접근 실패
 

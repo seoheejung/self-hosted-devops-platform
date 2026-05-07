@@ -25,7 +25,7 @@ services:
       # GitLab Omnibus 설정
       GITLAB_OMNIBUS_CONFIG: |
         # Main PC에서 접근 가능한 Mini PC 내부 IP 기준 URL
-        external_url 'http://<MINI_PC_IP>:8080'
+        external_url 'http://${MINI_PC_HOST}:8080'
 
         # GitLab Repository SSH 접속 포트
         gitlab_rails['gitlab_shell_ssh_port'] = 2222
