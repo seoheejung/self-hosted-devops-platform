@@ -35,6 +35,17 @@ jobs:
           mkdir -p /home/gali/gitlab/data
           mkdir -p /home/gali/gitlab/logs
 
+      # Docker Desktop credential helper가 GitHub Actions runner 세션에서 실패하는 문제 방지
+      # GitLab CE public image pull에는 Docker Hub 인증이 필요하지 않으므로 credential store를 사용하지 않음
+      - name: Reset Docker credential config
+        run: |
+          mkdir -p ~/.docker
+          cat > ~/.docker/config.json <<'EOF'
+          {
+            "auths": {}
+          }
+          EOF
+
       # Mini PC WSL2 Ubuntu 내부에서 Docker Compose로 GitLab Container 실행
       # docker-compose.gitlab.yml의 external_url에서 사용할 Mini PC 내부 IP는 GitHub Secrets로 주입
       # GitLab 운영 데이터는 docker-compose.gitlab.yml의 volume 설정을 통해 /home/gali/gitlab 하위에 저장

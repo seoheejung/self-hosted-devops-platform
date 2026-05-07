@@ -76,24 +76,29 @@ Intel N100 기반 저전력 Mini PC 환경에서 성능 최적화 및 안정성 
  ├─ Git Push
  └─ GitHub Repository 관리
 
-                Git Push
+                Git Push / PR Merge
                      ↓
 
 [ GitHub ]
  ├─ Repository
  ├─ GitHub Actions
  └─ Secrets
+     └─ MINI_PC_HOST
 
-                SSH Deploy
+                Job Dispatch
                      ↓
 
 [ Mini PC - Windows 11 ]
- ├─ OpenSSH Server
  ├─ Docker Desktop
  ├─ WSL2 Ubuntu
+ │   ├─ GitHub self-hosted runner
+ │   ├─ Docker Compose 실행
+ │   └─ GitLab runtime volume
+ │       ├─ /home/gali/gitlab/config
+ │       ├─ /home/gali/gitlab/data
+ │       └─ /home/gali/gitlab/logs
  │
  ├─ GitLab Omnibus Container
- ├─ Git Repository
  ├─ Container Registry
  ├─ Nginx
  ├─ Prometheus
@@ -103,9 +108,22 @@ Intel N100 기반 저전력 Mini PC 환경에서 성능 최적화 및 안정성 
                 이후 전환
                      ↓
 
-[ Main PC ]
- └─ GitLab Runner
+[ GitLab ]
+ └─ GitLab Runner 기반 CI/CD
 ```
+
+### 배포 흐름
+```
+Main PC
+ → GitHub Repository
+ → GitHub Actions
+ → Mini PC self-hosted runner
+ → Docker Compose
+ → GitLab Container
+```
+- GitHub-hosted runner는 내부망 사설 IP의 Mini PC에 직접 접근할 수 없으므로 사용하지 않는다.
+
+- Mini PC WSL2 Ubuntu에 GitHub self-hosted runner를 등록하고, 해당 runner가 GitHub Actions job을 받아 Docker Compose를 실행한다.
 
 ---
 
@@ -170,6 +188,18 @@ self-hosted-devops-platform
 └─ README.md
 ```
 
+```md
+### GitLab runtime 데이터 경로
+
+- Repository 안의 `gitlab/` 디렉토리는 구조 표시용 placeholder로 유지한다.
+- 실제 GitLab 운영 데이터는 GitHub Actions workspace가 아니라 Mini PC WSL2 Ubuntu 내부 고정 경로에 저장한다.
+| 경로                         | 역할                              |
+| -------------------------- | ------------------------------- |
+| `/home/<USER>/gitlab/config` | GitLab 설정 파일                    |
+| `/home/<USER>/gitlab/data`   | Repository, DB, 업로드 파일 등 실제 데이터 |
+| `/home/<USER>/gitlab/logs`   | GitLab 로그                       |
+
+
 ---
 
 ## 변경 관리 프로세스 (Git Workflow)
@@ -214,10 +244,10 @@ feature/xxx
 
 | 문서 | 내용 |
 |---|---|
-| [architecture.md](docs/architecture.md) | Main PC, GitHub Actions, Mini PC, GitLab Runner로 구성된 전체 아키텍처 설명 |
-| [installation.md](docs/installation.md) | Windows 11, WSL2, Docker Desktop, GitLab Container 설치 절차 |
-| [github-actions-deploy.md](docs/github-actions-deploy.md) | GitHub Actions를 통한 Mini PC 초기 배포 자동화 구성 |
-| [gitlab-runner.md](docs/gitlab-runner.md) | GitLab 구축 이후 Main PC 기반 GitLab Runner 등록 및 운영 방식 |
+| [architecture.md](docs/architecture.md) | Main PC, GitHub Actions, Mini PC self-hosted runner, GitLab Container로 구성된 전체 아키텍처 설명 |
+| [installation.md](docs/installation.md) | Windows 11, WSL2, Docker Desktop 기반 GitLab 실행 환경 준비 절차 |
+| [github-actions-deploy.md](docs/github-actions-deploy.md) | GitHub self-hosted runner를 통한 Mini PC 내부 Docker Compose 배포 자동화 구성 |
+| [gitlab-runner.md](docs/gitlab-runner.md) | GitLab 구축 이후 GitLab Runner 등록 및 운영 방식 |
 | [monitoring.md](docs/monitoring.md) | Prometheus/Grafana 기반 모니터링 구성 |
 | [backup-strategy.md](docs/backup-strategy.md) | GitLab 데이터 백업 및 복구 전략 |
 | [troubleshooting.md](docs/troubleshooting.md) | 구축 및 운영 중 발생한 문제와 해결 기록 |
@@ -247,16 +277,32 @@ feature/xxx
 ### Phase 2. GitHub Actions 기반 초기 배포 구성
 
 #### 작업 내용
-- Mini PC OpenSSH Server 활성화
-- GitHub Actions용 SSH Key 생성
-- GitHub Repository Secrets 등록
-- GitHub Actions 배포 Workflow 작성
-- GitHub Actions에서 Mini PC SSH 접속 검증
+- GitHub-hosted runner의 내부망 Mini PC SSH 접근 한계 확인
+- Mini PC WSL2 Ubuntu에 GitHub self-hosted runner 등록
+- GitHub Actions Workflow 작성
+- `runs-on: self-hosted` 기반 배포 실행 구조 구성
+- GitHub Secrets를 통한 Mini PC 내부 접근 주소 관리
+- Docker credential helper 문제 대응
+- GitHub Actions에서 Mini PC WSL2 내부 Docker Compose 실행 검증
 
 #### 구현 목표
-- Git Push 이후 Mini PC에 자동 적용되는 초기 배포 경로 확보
-- GitLab 구축 전 단계에서 GitHub Actions 기반 자동화 구성
-- 수동 복사/수동 실행 없이 원격 배포 가능한 구조 확보
+- GitHub-hosted runner의 내부망 접근 제약 회피
+- Mini PC가 GitHub Actions job을 직접 받아 실행하는 구조 확보
+- SSH/SCP 배포 없이 Mini PC 내부에서 Docker Compose 실행
+- Git Push 이후 GitLab Container 자동 배포 경로 확보
+
+#### 구조 판단
+
+```text
+GitHub-hosted runner
+ → Mini PC 내부망 SSH 접속
+ → 실패: 사설 IP 접근 불가
+
+GitHub Actions
+ → Mini PC self-hosted runner
+ → Docker Compose 실행
+ → GitLab Container 배포
+```
 
 ---
 
@@ -265,8 +311,8 @@ feature/xxx
 #### 작업 내용
 - GitLab Omnibus Container 구성
 - Docker Compose 작성
-- GitLab Volume 구성
-- GitHub Actions를 통한 Docker Compose 실행
+- GitLab Volume 절대 경로 구성
+- GitHub Actions self-hosted runner를 통한 Docker Compose 실행
 - 초기 관리자 계정 설정
 - GitLab Web UI 접근 확인
 
@@ -278,19 +324,23 @@ feature/xxx
 
 ---
 
-### Phase 4. GitLab Runner 분리 구성
+### Phase 4. GitLab Runner 구성
 
 #### 작업 내용
-- Main PC에 GitLab Runner 설치
+- GitLab 구축 이후 GitLab Runner 설치 위치 결정
 - GitLab Runner 등록
 - Docker Executor 설정
 - Runner Tag 설정
 - 테스트 Pipeline 실행
 
 #### 구현 목표
-- Main PC 기반 Runner 분리 구성
+- GitLab 자체 CI/CD 실행 기반 확보
 - Docker Executor 기반 Pipeline 실행
-- CI Job 분산 처리
+- GitHub Actions 초기 배포 구조에서 GitLab Runner 기반 운영 구조로 전환
+
+#### 전환 기준
+- 초기 구축 단계에서는 GitHub Actions self-hosted runner를 사용한다.
+- GitLab Web UI 접근, 사용자 생성, Repository 생성이 완료된 이후 GitLab Runner를 별도로 구성한다.
 
 ---
 
