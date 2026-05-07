@@ -17,17 +17,25 @@ services:
 
     # Host Port : Container Port
     ports:
-      - "8080:80"    # GitLab Web UI HTTP 접속
-      - "8443:443"   # GitLab HTTPS 접속용 포트
+      - "8080:80"    # Main PC에서 GitLab Web UI 접근
+      - "8443:443"   # HTTPS 접속용 예비 포트
       - "2222:22"    # GitLab Repository SSH 접속용 포트
 
     environment:
       # GitLab Omnibus 설정
       GITLAB_OMNIBUS_CONFIG: |
         # Main PC에서 접근 가능한 Mini PC 내부 IP 기준 URL
+        # MINI_PC_HOST는 GitHub Actions Secret에서 주입
         external_url 'http://${MINI_PC_HOST}:8080'
 
+        # external_url에 8080 포트를 사용하면 GitLab 내부 Nginx도 8080으로 listen할 수 있음
+        # 하지만 Compose 포트 매핑은 Host 8080 → Container 80 구조이므로
+        # 컨테이너 내부 Nginx는 80번 포트로 고정한다.
+        nginx['listen_port'] = 80
+        nginx['listen_https'] = false
+
         # GitLab Repository SSH 접속 포트
+        # Host 2222 → Container 22 포트 매핑과 일치시킨다.
         gitlab_rails['gitlab_shell_ssh_port'] = 2222
 
         # Mini PC 리소스 절약을 위한 GitLab 프로세스 튜닝
