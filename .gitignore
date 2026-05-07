@@ -70,6 +70,9 @@ gitlab/logs/*
 gitlab/config/*
 gitlab/tmp/*
 
+!gitlab/config/
+!gitlab/data/
+!gitlab/logs/
 !gitlab/data/.gitkeep
 !gitlab/logs/.gitkeep
 !gitlab/config/.gitkeep

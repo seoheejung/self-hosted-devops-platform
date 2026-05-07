@@ -1,0 +1,42 @@
+services:
+  gitlab:
+    # GitLab Community Edition Omnibus 이미지
+    image: gitlab/gitlab-ce:latest
+
+    # 컨테이너 이름 고정
+    container_name: gitlab
+
+    # 컨테이너 중지 시 수동 중지가 아니면 자동 재시작
+    restart: unless-stopped
+
+    # GitLab 내부 hostname
+    hostname: gitlab.local
+
+    # GitLab 권장 공유 메모리 설정
+    shm_size: "256m"
+
+    # Host Port : Container Port
+    ports:
+      - "8080:80"    # GitLab Web UI HTTP 접속
+      - "8443:443"   # GitLab HTTPS 접속용 포트
+      - "2222:22"    # GitLab Repository SSH 접속용 포트
+
+    environment:
+      # GitLab Omnibus 설정
+      GITLAB_OMNIBUS_CONFIG: |
+        # Main PC에서 접근 가능한 Mini PC 내부 IP 기준 URL
+        external_url 'http://<MINI_PC_IP>:8080'
+
+        # GitLab Repository SSH 접속 포트
+        gitlab_rails['gitlab_shell_ssh_port'] = 2222
+
+        # Mini PC 리소스 절약을 위한 GitLab 프로세스 튜닝
+        puma['worker_processes'] = 1
+        sidekiq['concurrency'] = 5
+        postgresql['shared_buffers'] = "256MB"
+
+    # GitLab 데이터 영속화 볼륨
+    volumes:
+      - ../../gitlab/config:/etc/gitlab        # GitLab 설정 파일
+      - ../../gitlab/logs:/var/log/gitlab      # GitLab 로그 파일
+      - ../../gitlab/data:/var/opt/gitlab      # GitLab Repository, DB, 업로드 데이터
