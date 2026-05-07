@@ -1,0 +1,98 @@
+name: Deploy GitLab to Mini PC
+
+on:
+  push:
+    branches:
+      # main 브랜치에 push 또는 merge될 때만 배포 실행
+      - main
+    paths:
+      # GitLab Docker Compose 파일이 변경된 경우에만 실행
+      - "infra/compose/docker-compose.gitlab.yml"
+
+      # 배포 Workflow 자체가 변경된 경우에도 실행
+      - ".github/workflows/deploy-gitlab.yml"
+
+jobs:
+  deploy:
+    # GitHub Actions runner 실행 환경
+    runs-on: ubuntu-latest
+
+    steps:
+      # GitHub Repository 파일을 Actions runner로 가져옴
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Mini PC의 WSL2 Ubuntu 내부에 Compose 파일 배치용 디렉토리 생성
+      - name: Prepare deploy directory on Mini PC
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          # Mini PC 내부망 IP 또는 Host
+          host: ${{ secrets.MINI_PC_HOST }}
+
+          # Mini PC Windows SSH 사용자
+          username: ${{ secrets.MINI_PC_USER }}
+
+          # Mini PC SSH 접속용 private key
+          key: ${{ secrets.MINI_PC_SSH_KEY }}
+
+          script: |
+            # Windows SSH 세션에서 WSL2 Ubuntu 명령 실행
+            # GitLab Compose 파일이 위치할 WSL 내부 디렉토리 생성
+            wsl -d Ubuntu-22.04 -- mkdir -p ${{ secrets.MINI_PC_WSL_PROJECT_PATH }}/infra/compose
+
+      # Actions runner의 Compose 파일을 Mini PC Windows 임시 경로로 복사
+      - name: Copy compose file to Mini PC
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          # Mini PC 내부망 IP 또는 Host
+          host: ${{ secrets.MINI_PC_HOST }}
+
+          # Mini PC Windows SSH 사용자
+          username: ${{ secrets.MINI_PC_USER }}
+
+          # Mini PC SSH 접속용 private key
+          key: ${{ secrets.MINI_PC_SSH_KEY }}
+
+          # GitHub Repository 안의 복사 대상 파일
+          source: "infra/compose/docker-compose.gitlab.yml"
+
+          # Mini PC Windows 임시 복사 경로
+          target: ${{ secrets.MINI_PC_DEPLOY_TEMP }}
+
+      # Windows 임시 경로에 복사된 Compose 파일을 WSL2 Ubuntu 내부 경로로 이동
+      - name: Move compose file into WSL
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          # Mini PC 내부망 IP 또는 Host
+          host: ${{ secrets.MINI_PC_HOST }}
+
+          # Mini PC Windows SSH 사용자
+          username: ${{ secrets.MINI_PC_USER }}
+
+          # Mini PC SSH 접속용 private key
+          key: ${{ secrets.MINI_PC_SSH_KEY }}
+
+          script: |
+            # WSL2 Ubuntu 내부 배포 디렉토리 보장
+            wsl -d Ubuntu-22.04 -- mkdir -p ${{ secrets.MINI_PC_WSL_PROJECT_PATH }}/infra/compose
+
+            # Windows 임시 경로의 Compose 파일을 WSL2 Ubuntu 내부 프로젝트 경로로 복사
+            wsl -d Ubuntu-22.04 -- cp ${{ secrets.MINI_PC_DEPLOY_TEMP_WSL }}/infra/compose/docker-compose.gitlab.yml ${{ secrets.MINI_PC_WSL_PROJECT_PATH }}/infra/compose/docker-compose.gitlab.yml
+
+      # WSL2 Ubuntu 내부에서 GitLab Container 실행
+      - name: Deploy GitLab container
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          # Mini PC 내부망 IP 또는 Host
+          host: ${{ secrets.MINI_PC_HOST }}
+
+          # Mini PC Windows SSH 사용자
+          username: ${{ secrets.MINI_PC_USER }}
+
+          # Mini PC SSH 접속용 private key
+          key: ${{ secrets.MINI_PC_SSH_KEY }}
+
+          script: |
+            # WSL2 Ubuntu 내부 프로젝트 경로에서 Docker Compose 실행
+            # GitLab Container 실행 후 docker ps로 상태 확인
+            wsl -d Ubuntu-22.04 -- bash -lc "cd ${{ secrets.MINI_PC_WSL_PROJECT_PATH }} && docker compose -f infra/compose/docker-compose.gitlab.yml up -d && docker ps"
