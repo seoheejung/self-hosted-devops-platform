@@ -329,27 +329,28 @@ GitHub Actions
 
 #### 작업 내용
 - GitLab Runner 실행 위치 결정
-- GitLab Runner config 경로 구성
+- Mini PC WSL2 Ubuntu에 GitLab Runner config 경로 구성
 - GitLab Runner Docker Container 실행
 - GitLab Web UI에서 Runner authentication token 발급
 - Docker Executor 기반 Runner 등록
 - Runner tag 설정
-- 테스트 Pipeline 작성 및 실행
+- 테스트용 GitLab Repository 생성
+- `.gitlab-ci.yml` 기반 테스트 Pipeline 작성
+- 테스트 Pipeline 실행 및 `Passed` 확인
 - Mini PC 재시작 후 Runner Container 재기동 확인
 
 #### 구현 목표
-- GitLab 자체 CI/CD 실행 기반 확보
+- GitLab Repository의 CI/CD Job 실행 기반 확보
 - GitLab 서버와 CI Job 실행 책임 분리
 - Docker Executor 기반 격리된 Pipeline Job 실행
-- GitHub Actions 초기 배포 구조에서 GitLab Runner 기반 운영 구조로 전환
+- GitLab Runner가 GitLab Pipeline Job을 정상 수신하고 실행하는지 검증
 - 테스트 Pipeline `Passed` 확인
 
-#### 전환 기준
-- 초기 구축 단계에서는 GitHub Actions self-hosted runner를 사용한다.
-- GitLab Web UI 접근, 관리자 로그인, Repository 생성이 완료된 이후 GitLab Runner를 별도로 구성한다.
-- GitHub self-hosted runner는 GitLab 서버 부트스트랩 배포용이다.
-- GitLab Runner는 GitLab 내부 Repository의 `.gitlab-ci.yml` 실행용이다.
-- Docker image build 및 deploy job은 Phase 5에서 별도 구성한다.
+#### 자동화 범위
+- GitHub Actions self-hosted runner는 GitLab 서버 Container 배포/갱신에 사용한다.
+- GitLab Runner는 GitLab Repository의 `.gitlab-ci.yml` Pipeline 실행에 사용한다.
+- Phase 4에서는 GitHub Actions를 대체하지 않고, GitLab 내부 CI/CD 실행 환경을 추가한다.
+- Docker image build 및 실제 deploy job은 Phase 5에서 별도 구성한다.
 
 ---
 

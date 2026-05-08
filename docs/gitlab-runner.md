@@ -23,7 +23,7 @@ GitLab Runner
  ├─ Build 실행
  ├─ Test 실행
  └─ Docker Executor 기반 Job 실행
- ```
+```
 
  ### 용어 정리
 
@@ -47,6 +47,78 @@ GitLab Runner
 
 > GitHub self-hosted runner는 GitLab 서버를 배포하기 위한 초기 자동화 수단이다.
 > GitLab Runner는 GitLab 내부 Repository의 `.gitlab-ci.yml`을 실행하기 위한 CI/CD 실행기다.
+
+---
+
+## 자동화 범위 구분
+
+현재 프로젝트에는 두 종류의 자동화 흐름이 존재한다.
+
+| 구분 | 역할 | 실행 주체 | 대상 |
+| --- | --- | --- | --- |
+| GitHub Actions 자동 배포 | GitLab 서버 Container 배포 및 갱신 | GitHub self-hosted runner | Mini PC Docker Compose |
+| GitLab Runner Pipeline | GitLab Repository의 CI Job 실행 | GitLab Runner | `.gitlab-ci.yml` |
+
+### GitHub Actions 자동 배포
+
+GitHub Actions 자동 배포는 GitLab 서버를 Mini PC에 배포하기 위한 초기 부트스트랩 자동화다.
+
+```text
+GitHub Repository
+ └─ main merge
+        ↓
+
+GitHub Actions
+ └─ Mini PC self-hosted runner
+        ↓
+
+Mini PC WSL2 Ubuntu
+ └─ Docker Compose 실행
+        ↓
+
+GitLab Container 배포 / 갱신
+```
+이 자동화는 GitLab 서버 자체를 배포하는 것이 목적이다.
+
+### GitLab Runner Pipeline
+
+GitLab Runner Pipeline은 구축된 GitLab 서버 안에서 Repository의 CI Job을 실행하기 위한 자동화다.
+
+```
+GitLab Repository
+ └─ .gitlab-ci.yml commit / push
+        ↓
+
+GitLab Pipeline 생성
+        ↓
+
+GitLab Runner
+ └─ CI Job 실행
+        ↓
+
+Build / Test / Deploy
+```
+
+GitLab Runner는 GitHub Repository의 변경 사항을 자동으로 가져오지 않는다.
+
+`.gitlab-ci.yml`은 GitLab 서버 안에 생성된 Repository에 존재해야 하며, 해당 GitLab Repository에 push될 때 Pipeline이 실행된다.
+
+### 주의
+
+GitHub Repository와 Mini PC GitLab Repository는 서로 다른 저장소다.
+
+```
+GitHub Repository
+ └─ GitLab 서버 배포 소스
+
+Mini PC GitLab Repository
+ └─ GitLab Runner Pipeline 실행 대상
+```
+
+따라서 GitHub Repository에 `.gitlab-ci.yml`을 추가해도 Mini PC GitLab Repository에 자동 반영되지 않는다.
+
+Phase 4에서는 GitLab Runner 동작 검증이 목적이므로, 별도 테스트 프로젝트를 생성해 `.gitlab-ci.yml`을 추가하고 Pipeline `Passed`를 확인한다.
+
 
 ---
 
@@ -151,11 +223,11 @@ GitLab Web UI
 
 Phase 4에서는 Docker image build나 deploy job을 만들지 않는다.
 
-검증 목적은 아래에 한정한다.
+검증 목적은 GitLab Runner가 GitLab Repository의 Job을 정상 수신하고 실행하는지 확인하는 것이다.
 
-```
-GitLab Repository
- → .gitlab-ci.yml
+```text
+Mini PC GitLab 테스트 Repository
+ → .gitlab-ci.yml commit / push
  → Pipeline 생성
  → GitLab Runner가 Job 수신
  → alpine 기반 test job 실행
