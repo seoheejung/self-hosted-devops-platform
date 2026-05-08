@@ -50,16 +50,17 @@ GitLab Runner
 
 ---
 
-## 구성 방식
+## 구성 기준
 
 | 항목 | 내용 |
-| --- | --- |
+|---|---|
 | Runner 위치 | Mini PC WSL2 Ubuntu |
 | 실행 방식 | Docker Container |
 | Executor | Docker Executor |
-| Runner 용도 | GitLab CI/CD Job 실행 |
-| GitLab URL | `http://172.30.1.69:8080` |
 | Runner config 경로 | `/home/<USER>/gitlab-runner/config` |
+| Runner 이름 | `mini-pc-docker-runner` |
+| Tags | `docker`, `mini-pc`, `wsl2` |
+| 기본 이미지 | `alpine:latest` |
 
 ---
 
@@ -111,8 +112,38 @@ Docker socket: /var/run/docker.sock:/var/run/docker.sock
 | Executor | `docker` |
 | Default image | `alpine:latest` |
 
-- Runner authentication token은 GitLab Web UI에서 발급받는다.
+> Runner 생성은 GitLab Web UI에서 수행하고, Runner 등록은 Mini PC WSL2 Ubuntu의 `gitlab-runner` Container에서 수행한다.
+
+---
+
+## Runner 등록 토큰 발급
+
+GitLab Web UI에서 Runner를 먼저 생성하고, 생성 후 표시되는 Runner authentication token을 사용해 Runner Container를 등록한다.
+
+```text
+GitLab Web UI
+ → Admin Area
+ → CI/CD
+ → Runners
+ → Create instance runner
+```
+
+### Runner 생성 기준
+| 항목                | 값                           |
+| ----------------- | --------------------------- |
+| Runner type       | Instance runner             |
+| Description       | `mini-pc-docker-runner`     |
+| Tags              | `docker`, `mini-pc`, `wsl2` |
+| Run untagged jobs | 필요 시 활성화                    |
+
+> 생성 후 표시되는 Runner authentication token을 복사한다.
+
+#### Token 관리 기준
+- Runner authentication token은 GitLab Runner 등록에 사용한다.
 - Token은 문서, README, Git commit에 남기지 않는다.
+- Token이 노출되면 GitLab UI에서 해당 Runner를 삭제하고 다시 생성한다.
+- 기존 Runner registration token 방식은 deprecated 상태이며 GitLab 20.0에서 제거 예정이므로 사용하지 않는다.
+- Runner authentication token은 보통 `glrt-` prefix를 가진다.
 
 ---
 
