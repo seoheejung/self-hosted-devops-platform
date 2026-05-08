@@ -184,6 +184,7 @@ self-hosted-devops-platform
 │  │  └─ deploy-gitlab.yml
 │  └─ pull_request_template.md
 │
+├─ .gitlab-ci.yml
 ├─ .gitignore
 └─ README.md
 ```
