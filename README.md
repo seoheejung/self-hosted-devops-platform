@@ -136,6 +136,7 @@ self-hosted-devops-platform
 │  ├─ architecture.md
 │  ├─ installation.md
 │  ├─ github-actions-deploy.md
+│  ├─ gitlab-ci-pipeline.md
 │  ├─ gitlab-runner.md
 │  ├─ monitoring.md
 │  ├─ backup-strategy.md
@@ -189,7 +190,6 @@ self-hosted-devops-platform
 └─ README.md
 ```
 
-```md
 ### GitLab runtime 데이터 경로
 
 - Repository 안의 `gitlab/` 디렉토리는 구조 표시용 placeholder로 유지한다.
@@ -249,6 +249,7 @@ feature/xxx
 | [installation.md](docs/installation.md) | Windows 11, WSL2, Docker Desktop 기반 GitLab 실행 환경 준비 절차 |
 | [github-actions-deploy.md](docs/github-actions-deploy.md) | GitHub self-hosted runner를 통한 Mini PC 내부 Docker Compose 배포 자동화 구성 |
 | [gitlab-runner.md](docs/gitlab-runner.md) | Docker Executor 기반 GitLab Runner 등록, 테스트 Pipeline 실행, Runner 운영 기준 |
+| [gitlab-ci-pipeline.md](docs/gitlab-ci-pipeline.md) | GitLab Runner 기반 Build/Test/Docker Build/Deploy Pipeline 구성 |
 | [monitoring.md](docs/monitoring.md) | Prometheus/Grafana 기반 모니터링 구성 |
 | [backup-strategy.md](docs/backup-strategy.md) | GitLab 데이터 백업 및 복구 전략 |
 | [troubleshooting.md](docs/troubleshooting.md) | 구축 및 운영 중 발생한 문제와 해결 기록 |
@@ -359,27 +360,31 @@ GitHub Actions
 #### Pipeline Flow
 
 ```text
-Git Push
+GitLab Repository
  → GitLab Pipeline
- → Build
+ → Validate
  → Test
  → Docker Build
- → Mini PC Deploy
+ → Deploy
 ```
 
-#### 작업 내용
-- Build Job 구성
+### 작업 내용
+- `.gitlab-ci.yml` Pipeline 구조 작성
+- Validate Job 구성
 - Test Job 구성
-- Docker Image Build 구성
-- Mini PC 배포 Job 구성
-- 배포 결과 검증
+- Docker socket 사용 여부 결정
+- Docker Compose config 검증 Job 구성
+- Docker Image Build 필요 여부 판단
+- Deploy Job 실행 범위 결정
+- Pipeline 실행 결과 검증
 
-#### 구현 목표
-- 자동 Build
-- 테스트 자동화
-- Docker Image Build
-- 자동 Deploy
-- Deploy 결과 검증
+### 구현 목표
+- GitLab Runner 기반 Pipeline 구조 확보
+- Repository 변경 시 Pipeline 자동 실행
+- Validate/Test Job 정상 실행
+- Docker Compose 검증 가능 여부 확인
+- Docker Build 및 Deploy Job 확장 기준 정리
+- 실제 배포 전 안전한 검증 Pipeline 확보
 
 ---
 
