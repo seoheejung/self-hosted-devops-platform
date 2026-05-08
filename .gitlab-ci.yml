@@ -1,0 +1,13 @@
+stages:
+  - test
+
+runner-test:
+  stage: test
+  image: alpine:latest
+  tags:
+    - docker
+    - mini-pc
+    - wsl2
+  script:
+    - echo "GitLab Runner test"
+    - uname -a

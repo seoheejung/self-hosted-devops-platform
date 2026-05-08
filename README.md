@@ -184,6 +184,7 @@ self-hosted-devops-platform
 │  │  └─ deploy-gitlab.yml
 │  └─ pull_request_template.md
 │
+├─ .gitlab-ci.yml
 ├─ .gitignore
 └─ README.md
 ```
@@ -247,7 +248,7 @@ feature/xxx
 | [architecture.md](docs/architecture.md) | Main PC, GitHub Actions, Mini PC self-hosted runner, GitLab Container로 구성된 전체 아키텍처 설명 |
 | [installation.md](docs/installation.md) | Windows 11, WSL2, Docker Desktop 기반 GitLab 실행 환경 준비 절차 |
 | [github-actions-deploy.md](docs/github-actions-deploy.md) | GitHub self-hosted runner를 통한 Mini PC 내부 Docker Compose 배포 자동화 구성 |
-| [gitlab-runner.md](docs/gitlab-runner.md) | GitLab 구축 이후 GitLab Runner 등록 및 운영 방식 |
+| [gitlab-runner.md](docs/gitlab-runner.md) | Docker Executor 기반 GitLab Runner 등록, 테스트 Pipeline 실행, Runner 운영 기준 |
 | [monitoring.md](docs/monitoring.md) | Prometheus/Grafana 기반 모니터링 구성 |
 | [backup-strategy.md](docs/backup-strategy.md) | GitLab 데이터 백업 및 복구 전략 |
 | [troubleshooting.md](docs/troubleshooting.md) | 구축 및 운영 중 발생한 문제와 해결 기록 |
@@ -327,20 +328,29 @@ GitHub Actions
 ### Phase 4. GitLab Runner 구성
 
 #### 작업 내용
-- GitLab 구축 이후 GitLab Runner 설치 위치 결정
-- GitLab Runner 등록
-- Docker Executor 설정
-- Runner Tag 설정
-- 테스트 Pipeline 실행
+- GitLab Runner 실행 위치 결정
+- Mini PC WSL2 Ubuntu에 GitLab Runner config 경로 구성
+- GitLab Runner Docker Container 실행
+- GitLab Web UI에서 Runner authentication token 발급
+- Docker Executor 기반 Runner 등록
+- Runner tag 설정
+- 테스트용 GitLab Repository 생성
+- `.gitlab-ci.yml` 기반 테스트 Pipeline 작성
+- 테스트 Pipeline 실행 및 `Passed` 확인
+- Mini PC 재시작 후 Runner Container 재기동 확인
 
 #### 구현 목표
-- GitLab 자체 CI/CD 실행 기반 확보
-- Docker Executor 기반 Pipeline 실행
-- GitHub Actions 초기 배포 구조에서 GitLab Runner 기반 운영 구조로 전환
+- GitLab Repository의 CI/CD Job 실행 기반 확보
+- GitLab 서버와 CI Job 실행 책임 분리
+- Docker Executor 기반 격리된 Pipeline Job 실행
+- GitLab Runner가 GitLab Pipeline Job을 정상 수신하고 실행하는지 검증
+- 테스트 Pipeline `Passed` 확인
 
-#### 전환 기준
-- 초기 구축 단계에서는 GitHub Actions self-hosted runner를 사용한다.
-- GitLab Web UI 접근, 사용자 생성, Repository 생성이 완료된 이후 GitLab Runner를 별도로 구성한다.
+#### 자동화 범위
+- GitHub Actions self-hosted runner는 GitLab 서버 Container 배포/갱신에 사용한다.
+- GitLab Runner는 GitLab Repository의 `.gitlab-ci.yml` Pipeline 실행에 사용한다.
+- Phase 4에서는 GitHub Actions를 대체하지 않고, GitLab 내부 CI/CD 실행 환경을 추가한다.
+- Docker image build 및 실제 deploy job은 Phase 5에서 별도 구성한다.
 
 ---
 
