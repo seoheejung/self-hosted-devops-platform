@@ -6,9 +6,11 @@
 
 ## 목적
 
-GitLab Container는 Repository, Web UI, 사용자 관리, Pipeline 관리 역할에 집중한다.
+GitLab Container는 소스 코드 저장소, Web UI, 사용자 관리, Pipeline 상태 관리 역할에 집중한다.
 
-Build, Test, Deploy 같은 CI Job 실행은 별도 GitLab Runner가 담당한다.
+Build, Test, Deploy 같은 실제 작업 실행은 별도 GitLab Runner가 담당한다.
+
+즉, GitLab은 “작업을 만들고 관리하는 서버”이고, GitLab Runner는 “작업을 실제로 실행하는 실행기”다.
 
 ```text
 GitLab Container
@@ -22,6 +24,17 @@ GitLab Runner
  ├─ Test 실행
  └─ Docker Executor 기반 Job 실행
  ```
+
+ ### 용어 정리
+
+| 용어 | 의미 |
+| --- | --- |
+| Repository | 소스 코드와 변경 이력을 저장하는 공간 |
+| Web UI | 브라우저에서 GitLab 프로젝트, 사용자, Pipeline 상태를 관리하는 화면 |
+| Pipeline | 코드 변경 후 자동으로 실행되는 작업 흐름 |
+| CI Job | Pipeline 안에서 실행되는 개별 작업 단위. 예: Build, Test, Deploy |
+| GitLab Runner | GitLab에서 생성한 CI Job을 실제로 실행하는 프로그램 |
+| Docker Executor | CI Job을 Docker Container 안에서 실행하는 Runner 실행 방식 |
 
 ---
 
