@@ -49,6 +49,65 @@ jobs:
           }
           EOF
 
+      # Windows reserved port range에서 8080 제거
+      #
+      # Docker Desktop on WSL2는 Host port를 Windows 쪽에 bind한다.
+      # Windows excluded port range에 8080이 포함되어 있으면
+      # Docker가 Host 8080 → Container 80 포트를 publish하지 못한다.
+      #
+      # 처리 흐름:
+      # 1. Windows excluded TCP port range 조회
+      # 2. 8080이 포함된 range 탐지
+      # 3. WinNAT 중지
+      # 4. 해당 excluded range 제거
+      # 5. WinNAT 재시작
+      #
+      # 주의:
+      # - 이 step은 Windows 관리자 권한이 있는 runner 세션에서 실행되어야 한다.
+      # - 8080이 예약 범위에 없으면 아무 작업도 하지 않는다.
+      - name: Release Windows reserved port 8080
+        shell: bash
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '
+            $targetPort = 8080
+
+            Write-Host "Checking Windows excluded TCP port ranges..."
+            $ranges = netsh interface ipv4 show excludedportrange protocol=tcp
+
+            $matched = $false
+
+            foreach ($line in $ranges) {
+              if ($line -match "^\s*(\d+)\s+(\d+)") {
+                $start = [int]$matches[1]
+                $end = [int]$matches[2]
+
+                if ($targetPort -ge $start -and $targetPort -le $end) {
+                  $matched = $true
+                  $count = $end - $start + 1
+
+                  Write-Host "Port $targetPort is reserved in range $start-$end"
+                  Write-Host "Stopping WinNAT..."
+                  net stop winnat
+
+                  Write-Host "Deleting excluded port range: start=$start, count=$count"
+                  netsh interface ipv4 delete excludedportrange protocol=tcp startport=$start numberofports=$count
+
+                  Write-Host "Starting WinNAT..."
+                  net start winnat
+
+                  break
+                }
+              }
+            }
+
+            if (-not $matched) {
+              Write-Host "Port $targetPort is not reserved. No action required."
+            }
+
+            Write-Host "Current excluded TCP port ranges:"
+            netsh interface ipv4 show excludedportrange protocol=tcp
+          '
+
       # Mini PC WSL2 Ubuntu 내부에서 Docker Compose로 GitLab Container 실행
       #
       # 기존 gitlab Container가 Created / Exited / 잘못된 port publish 상태로 남아 있을 수 있으므로
