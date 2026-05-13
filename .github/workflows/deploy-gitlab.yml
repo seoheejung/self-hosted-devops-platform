@@ -12,6 +12,9 @@ on:
       # 배포 Workflow 자체가 변경된 경우에도 실행
       - ".github/workflows/deploy-gitlab.yml"
 
+  # 문서만 변경된 경우에도 필요 시 수동으로 배포/검증 실행
+  workflow_dispatch:
+
 jobs:
   deploy:
     # Mini PC WSL2 Ubuntu에 등록한 GitHub self-hosted runner에서 실행
@@ -59,3 +62,53 @@ jobs:
         run: |
           docker compose -f infra/compose/docker-compose.gitlab.yml up -d
           docker ps
+
+      # GitLab Container 재배포 후 runtime volume이 기존 고정 경로를 유지하는지 확인
+      # 이 검증은 GitLab 재시작 후 프로젝트 / Runner 정보가 사라지는 문제를 방지하기 위한 확인 단계
+      - name: Verify GitLab volume mounts
+        run: |
+          docker inspect gitlab --format '{{json .Mounts}}' | python3 -m json.tool
+
+      # GitLab 주요 서비스가 정상 기동될 때까지 대기
+      # GitLab은 재시작 직후 runsv not running 상태가 잠시 발생할 수 있음
+      - name: Wait for GitLab services
+        run: |
+          for i in {1..30}; do
+            if docker exec gitlab gitlab-ctl status | grep -q "run: puma" && \
+               docker exec gitlab gitlab-ctl status | grep -q "run: postgresql" && \
+               docker exec gitlab gitlab-ctl status | grep -q "run: sidekiq" && \
+               docker exec gitlab gitlab-ctl status | grep -q "run: nginx"; then
+              echo "GitLab core services are running"
+              exit 0
+            fi
+
+            echo "Waiting for GitLab services... ($i/30)"
+            sleep 10
+          done
+
+          docker exec gitlab gitlab-ctl status
+          exit 1
+
+      # GitLab DB 기준으로 Phase 4에서 생성한 테스트 프로젝트와 Runner 등록 정보가 유지되는지 확인
+      # projects=0 또는 runners=0이면 GitLab 데이터가 초기화되었거나 다른 volume을 보고 있을 가능성이 있음
+      - name: Verify GitLab persistent data
+        run: |
+          docker exec gitlab gitlab-rails runner "puts \"projects=#{Project.count}\"; Project.order(:id).each { |p| puts \"#{p.id} #{p.full_path}\" }"
+
+          docker exec gitlab gitlab-rails runner "puts \"runners=#{Ci::Runner.count}\"; Ci::Runner.order(:id).each { |r| puts \"#{r.id} #{r.description} active=#{r.active}\" }"
+
+          PROJECT_COUNT=$(docker exec gitlab gitlab-rails runner "puts Project.count" | tail -n 1)
+          RUNNER_COUNT=$(docker exec gitlab gitlab-rails runner "puts Ci::Runner.count" | tail -n 1)
+
+          echo "PROJECT_COUNT=${PROJECT_COUNT}"
+          echo "RUNNER_COUNT=${RUNNER_COUNT}"
+
+          if [ "${PROJECT_COUNT}" -lt 1 ]; then
+            echo "GitLab project data is missing"
+            exit 1
+          fi
+
+          if [ "${RUNNER_COUNT}" -lt 1 ]; then
+            echo "GitLab runner registration data is missing"
+            exit 1
+          fi
