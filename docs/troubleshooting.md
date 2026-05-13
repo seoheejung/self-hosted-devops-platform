@@ -251,3 +251,110 @@ docker ps --filter name=gitlab
 docker exec -it gitlab gitlab-ctl status
 docker exec -it gitlab curl -I http://127.0.0.1/-/readiness
 ```
+
+---
+
+## GitLab 재시작 후 프로젝트와 Runner 정보가 사라짐
+
+### 증상
+
+GitLab 재시작 또는 GitHub Actions 배포 이후 Phase 4에서 생성한 항목이 보이지 않았다.
+
+- `runner-test` 프로젝트 없음
+- `mini-pc-docker-runner` Runner 없음
+- Admin Area → CI/CD → Runners 수 `0`
+
+### 확인
+
+#### 1. GitLab volume mount 확인
+
+```bash
+docker inspect gitlab --format '{{json .Mounts}}' | python3 -m json.tool
+```
+
+#### 정상 기준
+```
+/home/gali/gitlab/config → /etc/gitlab
+/home/gali/gitlab/logs   → /var/log/gitlab
+/home/gali/gitlab/data   → /var/opt/gitlab
+```
+
+### 2. GitLab DB 기준 프로젝트 확인
+```
+docker exec -it gitlab gitlab-rails runner "puts \"projects=#{Project.count}\"; Project.order(:id).each { |p| puts \"#{p.id} #{p.full_path}\" }"
+```
+
+#### 문제 발생 시 결과
+```
+projects=0
+```
+
+### 3. GitLab DB 기준 Runner 확인
+```
+docker exec -it gitlab gitlab-rails runner "puts \"runners=#{Ci::Runner.count}\"; Ci::Runner.order(:id).each { |r| puts \"#{r.id} #{r.description} active=#{r.active}\" }"
+```
+
+#### 문제 발생 시 결과
+```
+runners=0
+```
+
+### 판단
+
+Volume mount는 정상이나 GitLab DB 기준으로 프로젝트와 Runner 정보가 없었다.
+
+```
+projects=0
+runners=0
+```
+> 즉, UI 표시 문제가 아니라 현재 `/home/gali/gitlab/data` 기준 GitLab DB가 빈 상태로 초기화된 것으로 판단한다.
+
+#### 가능한 원인
+- Phase 4 수행 당시와 현재 GitLab 데이터 경로가 달랐을 가능성
+- `/home/gali/gitlab/data`가 삭제 또는 재생성되었을 가능성
+- GitHub Actions workspace 내부 상대 경로를 volume으로 사용했던 시점이 있었을 가능성
+
+### 해결
+
+#### 현재 정상 mount 경로 기준으로 Phase 4 재수행
+```
+docker rm -f gitlab-runner
+
+rm -rf /home/gali/gitlab-runner/config
+mkdir -p /home/gali/gitlab-runner/config
+```
+
+#### GitLab Web UI에서 Runner 재생성
+```
+Admin Area
+ → CI/CD
+ → Runners
+ → Create instance runner
+```
+
+#### Runner Container 재실행
+```
+docker run -d \
+  --name gitlab-runner \
+  --restart unless-stopped \
+  -v /home/gali/gitlab-runner/config:/etc/gitlab-runner \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  gitlab/gitlab-runner:latest
+```
+
+#### Runner 등록
+```
+docker exec -it gitlab-runner gitlab-runner register
+```
+
+`runner-test` 프로젝트와 `.gitlab-ci.yml`을 다시 생성한 뒤 Pipeline `Passed`를 확인한다.
+
+### 재발 방지
+
+- GitLab runtime volume은 `/home/gali/gitlab` 하위 절대 경로만 사용한다.
+- GitHub Actions workspace 내부 경로를 GitLab runtime volume으로 사용하지 않는다.
+- `/mnt/c`, `/mnt/d` 경로를 GitLab runtime volume으로 사용하지 않는다.
+- `docker compose down -v`를 사용하지 않는다.
+- `docker system prune --volumes`를 사용하지 않는다.
+- `/home/gali/gitlab/data`를 삭제하지 않는다.
+- 재배포 전후 mount 경로를 확인한다.
