@@ -50,24 +50,45 @@ jobs:
           EOF
 
       # Mini PC WSL2 Ubuntu 내부에서 Docker Compose로 GitLab Container 실행
-      # docker-compose.gitlab.yml의 external_url에서 사용할 Mini PC 내부 IP는 GitHub Secrets로 주입
-      # GitLab 운영 데이터는 docker-compose.gitlab.yml의 volume 설정을 통해 /home/gali/gitlab 하위에 저장
       #
-      # MINI_PC_HOST       : GitLab external_url에 사용할 Mini PC 내부 IP
-      # up -d              : 백그라운드 실행
-      # --force-recreate   : 기존 Container 설정 drift 발생 시 Compose 정의 기준으로 재생성
-      # --remove-orphans   : 현재 Compose 파일에 없는 orphan Container 정리
-      # docker ps          : 컨테이너 실행 상태 확인
-      # docker port gitlab : GitLab Container 포트 publish 상태 확인
+      # 기존 gitlab Container가 Created / Exited / 잘못된 port publish 상태로 남아 있을 수 있으므로
+      # 배포 전에 기존 gitlab Container를 먼저 제거한다.
+      #
+      # docker rm -f gitlab:
+      #   기존 gitlab Container 제거
+      #   /home/gali/gitlab 하위 bind mount 데이터는 삭제하지 않음
+      #
+      # docker compose up -d:
+      #   docker-compose.gitlab.yml 정의 기준으로 GitLab Container 재생성
+      #
+      # --remove-orphans:
+      #   현재 Compose 파일에 없는 orphan Container 정리
+      #
+      # MINI_PC_HOST:
+      #   GitLab external_url에 사용할 Mini PC 내부 IP
+      #
+      # docker ps:
+      #   컨테이너 실행 상태 확인
+      #
+      # docker port gitlab:
+      #   GitLab Container의 Host Port publish 상태 확인
       - name: Deploy GitLab container
         env:
           MINI_PC_HOST: ${{ secrets.MINI_PC_HOST }}
         run: |
-          docker compose -f infra/compose/docker-compose.gitlab.yml up -d --force-recreate --remove-orphans
+          docker rm -f gitlab || true
+          docker compose -f infra/compose/docker-compose.gitlab.yml up -d --remove-orphans
           docker ps
           docker port gitlab
-          
-      # 포트 누락 실패 처리
+
+      # GitLab Web UI 접근용 Host 8080 → Container 80 포트 publish 확인
+      #
+      # 정상 기준:
+      #   docker port gitlab 80
+      #   0.0.0.0:8080
+      #
+      # GitLab 부팅 중에는 curl 결과가 502일 수 있으므로,
+      # 여기서는 curl 실패를 즉시 실패 처리하지 않고 로그만 남긴다.
       - name: Verify GitLab published ports
         run: |
           docker port gitlab
@@ -80,13 +101,21 @@ jobs:
           curl -I --max-time 10 http://127.0.0.1:8080 || true
 
       # GitLab Container 재배포 후 runtime volume이 기존 고정 경로를 유지하는지 확인
+      #
       # 이 검증은 GitLab 재시작 후 프로젝트 / Runner 정보가 사라지는 문제를 방지하기 위한 확인 단계
+      #
+      # 정상 기준:
+      #   /home/gali/gitlab/config → /etc/gitlab
+      #   /home/gali/gitlab/logs   → /var/log/gitlab
+      #   /home/gali/gitlab/data   → /var/opt/gitlab
       - name: Verify GitLab volume mounts
         run: |
           docker inspect gitlab --format '{{json .Mounts}}' | python3 -m json.tool
 
       # GitLab 주요 서비스가 정상 기동될 때까지 대기
-      # GitLab은 재시작 직후 runsv not running 상태가 잠시 발생할 수 있음
+      #
+      # GitLab은 Container 시작 직후 runsv not running 상태가 잠시 발생할 수 있음
+      # puma / postgresql / sidekiq / nginx가 run 상태가 될 때까지 최대 5분 대기
       - name: Wait for GitLab services
         run: |
           for i in {1..30}; do
@@ -106,7 +135,16 @@ jobs:
           exit 1
 
       # GitLab DB 기준으로 Phase 4에서 생성한 테스트 프로젝트와 Runner 등록 정보가 유지되는지 확인
-      # projects=0 또는 runners=0이면 GitLab 데이터가 초기화되었거나 다른 volume을 보고 있을 가능성이 있음
+      #
+      # projects=0:
+      #   GitLab 프로젝트 데이터가 사라졌거나 다른 volume을 보고 있을 가능성
+      #
+      # runners=0:
+      #   GitLab Runner 등록 정보가 사라졌거나 GitLab DB가 초기화되었을 가능성
+      #
+      # 정상 기준:
+      #   PROJECT_COUNT >= 1
+      #   RUNNER_COUNT >= 1
       - name: Verify GitLab persistent data
         run: |
           docker exec gitlab gitlab-rails runner "puts \"projects=#{Project.count}\"; Project.order(:id).each { |p| puts \"#{p.id} #{p.full_path}\" }"
