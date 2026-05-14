@@ -27,7 +27,7 @@ validate-compose:
     - docker compose -f infra/compose/docker-compose.gitlab.yml config
 
 # 배포 단계 실행 가능 여부 확인 Job
-# 실제 docker compose up -d는 아직 실행하지 않음
+# 실제 배포 명령은 실행하지 않음
 deploy-readiness-check:
   stage: deploy-check
   image: alpine:latest
