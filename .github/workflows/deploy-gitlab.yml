@@ -49,6 +49,49 @@ jobs:
           }
           EOF
 
+      # 8080 포트 사전 조건 확인
+      #
+      # 8080 예약 해제는 GitHub Actions 안에서 처리하지 않는다.
+      # Actions Job 내부에서 WinNAT을 중지하면 self-hosted runner의 GitHub 연결이 끊길 수 있다.
+      #
+      # 8080 예약 해제는 Windows Scheduled Task에서 실행하는
+      # D:\DEV\prepare-github-runner.ps1 이 담당한다.
+      #
+      # 이 step은 현재 runner 실행 환경에서 8080이 Windows excluded port range에 남아 있는지만 확인한다.
+      # 8080이 아직 예약되어 있으면 배포 전에 실패시켜 원인을 명확히 한다.
+      - name: Verify Windows port 8080 is available
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TARGET_PORT=8080
+
+          echo "Checking Windows excluded TCP port ranges..."
+          RANGES_RAW=$(timeout 30s cmd.exe /c "netsh interface ipv4 show excludedportrange protocol=tcp")
+          RANGES=$(printf "%s" "$RANGES_RAW" | tr -d '\r')
+
+          echo "$RANGES"
+
+          MATCHED_RANGE=$(printf "%s\n" "$RANGES" | awk -v port="$TARGET_PORT" '
+            $1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ {
+              start=$1
+              end=$2
+
+              if (port >= start && port <= end) {
+                print start " " end
+                exit
+              }
+            }
+          ')
+
+          if [ -n "$MATCHED_RANGE" ]; then
+            echo "Port ${TARGET_PORT} is still reserved in Windows excluded port range: ${MATCHED_RANGE}"
+            echo "Run D:\\DEV\\prepare-github-runner.ps1 through the scheduled task before running this workflow."
+            exit 1
+          fi
+
+          echo "Port ${TARGET_PORT} is not reserved by Windows excluded port range."
+
       # Mini PC WSL2 Ubuntu 내부에서 Docker Compose로 GitLab Container 실행
       #
       # 기존 gitlab Container가 Created / Exited / 잘못된 port publish 상태로 남아 있을 수 있으므로
@@ -136,6 +179,9 @@ jobs:
 
       # GitLab DB 기준으로 Phase 4에서 생성한 테스트 프로젝트와 Runner 등록 정보가 유지되는지 확인
       #
+      # gitlab-rails runner는 Rails 전체 앱을 로딩하므로 Mini PC 환경에서 메모리 사용량이 크다.
+      # exit code 137이 발생할 수 있으므로 PostgreSQL 직접 조회 방식으로 검증한다.
+      #
       # projects=0:
       #   GitLab 프로젝트 데이터가 사라졌거나 다른 volume을 보고 있을 가능성
       #
@@ -147,12 +193,27 @@ jobs:
       #   RUNNER_COUNT >= 1
       - name: Verify GitLab persistent data
         run: |
-          docker exec gitlab gitlab-rails runner "puts \"projects=#{Project.count}\"; Project.order(:id).each { |p| puts \"#{p.id} #{p.full_path}\" }"
+          echo "Checking GitLab projects from PostgreSQL..."
 
-          docker exec gitlab gitlab-rails runner "puts \"runners=#{Ci::Runner.count}\"; Ci::Runner.order(:id).each { |r| puts \"#{r.id} #{r.description} active=#{r.active}\" }"
+          docker exec gitlab gitlab-psql -d gitlabhq_production -t -A -c "
+            SELECT
+              p.id || ' ' || n.path || '/' || p.path
+            FROM projects p
+            JOIN namespaces n ON p.namespace_id = n.id
+            ORDER BY p.id;
+          " || true
 
-          PROJECT_COUNT=$(docker exec gitlab gitlab-rails runner "puts Project.count" | tail -n 1)
-          RUNNER_COUNT=$(docker exec gitlab gitlab-rails runner "puts Ci::Runner.count" | tail -n 1)
+          echo "Checking GitLab runners from PostgreSQL..."
+
+          docker exec gitlab gitlab-psql -d gitlabhq_production -t -A -c "
+            SELECT
+              id || ' ' || COALESCE(description, '')
+            FROM ci_runners
+            ORDER BY id;
+          " || true
+
+          PROJECT_COUNT=$(docker exec gitlab gitlab-psql -d gitlabhq_production -t -A -c "SELECT COUNT(*) FROM projects;" | tr -d '[:space:]')
+          RUNNER_COUNT=$(docker exec gitlab gitlab-psql -d gitlabhq_production -t -A -c "SELECT COUNT(*) FROM ci_runners;" | tr -d '[:space:]')
 
           echo "PROJECT_COUNT=${PROJECT_COUNT}"
           echo "RUNNER_COUNT=${RUNNER_COUNT}"

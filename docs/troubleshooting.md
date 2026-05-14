@@ -232,28 +232,6 @@ MINI_PC_HOST=172.30.1.69 docker compose -f infra/compose/docker-compose.gitlab.y
 
 ---
 
-## GitLab Web UI 접근 실패
-
-### 확인 항목
-
-- GitLab Container 상태 확인
-- `docker logs -f gitlab` 확인
-- `gitlab-ctl status` 확인
-- `external_url` 값 확인
-- 내부 Nginx listen port 확인
-- Mini PC 방화벽 8080 포트 허용 여부 확인
-- Main PC와 Mini PC 동일 네트워크 여부 확인
-
-확인 명령:
-
-```
-docker ps --filter name=gitlab
-docker exec -it gitlab gitlab-ctl status
-docker exec -it gitlab curl -I http://127.0.0.1/-/readiness
-```
-
----
-
 ## GitLab 재시작 후 프로젝트와 Runner 정보가 사라짐
 
 ### 증상
@@ -358,3 +336,200 @@ docker exec -it gitlab-runner gitlab-runner register
 - `docker system prune --volumes`를 사용하지 않는다.
 - `/home/gali/gitlab/data`를 삭제하지 않는다.
 - 재배포 전후 mount 경로를 확인한다.
+
+---
+
+## GitLab Container 재배포 후 8080 포트 publish 누락
+
+### 증상
+
+GitHub Actions 배포 이후 GitLab Container는 생성됐지만 `8080:80` 포트 매핑이 적용되지 않았다.
+
+```
+docker ps --filter name=gitlab
+```
+
+#### 문제 발생 시 예시
+```
+80/tcp, 0.0.0.0:2222->22/tcp, 0.0.0.0:8443->443/tcp
+```
+
+#### 정상 기준
+```
+0.0.0.0:8080->80/tcp
+0.0.0.0:8443->443/tcp
+0.0.0.0:2222->22/tcp
+```
+
+### 원인
+
+기존 `gitlab` Container가 `Created`, `Exited`, 잘못된 port publish 상태로 남아 있을 수 있다.
+
+### 해결
+
+GitHub Actions 배포 전에 기존 `gitlab` Container를 제거하고 Compose 기준으로 다시 생성한다.
+
+```bash
+docker rm -f gitlab || true
+docker compose -f infra/compose/docker-compose.gitlab.yml up -d --remove-orphans
+docker ps
+docker port gitlab
+```
+
+### 확인
+
+```
+docker port gitlab
+```
+
+### 주의
+
+`docker rm -f gitlab`은 Container만 제거한다.
+
+아래 bind mount 데이터는 삭제하지 않는다.
+
+```
+/home/gali/gitlab/config
+/home/gali/gitlab/logs
+/home/gali/gitlab/data
+```
+
+---
+
+## Windows reserved port range로 인한 8080 bind 실패
+
+### 증상
+
+GitLab Container 생성 시 Host `8080` 포트 bind가 실패했다.
+
+```
+ports are not available: exposing port TCP 0.0.0.0:8080
+bind: An attempt was made to access a socket in a way forbidden by its access permissions.
+```
+
+### 확인
+
+Windows PowerShell에서 excluded port range를 확인한다.
+
+```
+netsh interface ipv4 show excludedportrange protocol=tcp
+```
+
+#### 문제 발생 시 예시
+```
+7981 ~ 8080
+8081 ~ 8180
+8181 ~ 8280
+```
+
+### 원인
+
+Windows excluded TCP port range에 `8080`이 포함되어 Docker Desktop이 Host `8080`을 bind하지 못했다.
+
+### 해결 방향
+
+GitLab Web UI 포트는 `8080`을 유지한다.
+
+단, GitHub Actions Workflow 안에서 WinNAT을 조작하지 않는다.
+
+예약 포트 해제는 Windows Scheduled Task에서 실행하는 사전 준비 스크립트가 담당한다. (`prepare-github-runner.ps1`)
+
+### 역할 분리
+
+| 작업 | 담당 |
+| --- | --- |
+| Windows reserved port 8080 해제 | `D:\DEV\prepare-github-runner.ps1` |
+| GitHub self-hosted runner 실행 | Windows Scheduled Task |
+| GitLab Container 배포 | GitHub Actions |
+| 8080 publish 검증 | GitHub Actions |
+
+---
+
+## GitHub Actions Job 안에서 WinNAT 조작 시 runner 연결 끊김
+
+### 증상
+
+GitHub Actions Workflow 안에서 WinNAT을 중지한 뒤 self-hosted runner가 GitHub 연결을 잃었다.
+
+```
+Runner connect error: The HTTP request timed out
+```
+
+WSL2 Ubuntu에서도 GitHub 접속이 실패했다.
+
+```
+curl -I --max-time 10 https://github.com
+```
+
+오류: `curl: (28) Connection timed out`
+
+### 원인
+
+Actions Job 실행 중 WinNAT을 중지하면 WSL2 / Docker Desktop 네트워크가 흔들리고, self-hosted runner의 GitHub 연결이 끊길 수 있다.
+
+문제 흐름:
+
+```
+Actions Job 실행 중
+ → WinNAT 중지
+ → WSL2 / Docker Desktop 네트워크 영향
+ → self-hosted runner GitHub 연결 끊김
+ → Job timeout
+```
+
+### 해결
+
+GitHub Actions Workflow 안에서는 아래 작업을 하지 않는다.
+
+```
+net stop winnat
+netsh interface ipv4 delete excludedportrange ...
+net start winnat
+```
+
+WinNAT / reserved port 처리는 GitHub Actions 실행 전 Windows Scheduled Task에서 수행한다.
+
+GitHub Actions는 배포와 검증만 담당한다.
+
+---
+
+## GitLab 데이터 유지 검증 중 gitlab-rails runner exit code 137
+
+### 증상
+
+GitHub Actions에서 GitLab 데이터 유지 검증을 위해 `gitlab-rails runner`를 실행했을 때 실패했다.
+
+```
+Process completed with exit code 137
+```
+
+### 원인
+
+`gitlab-rails runner`는 Rails 앱 전체를 로딩하므로 Mini PC 환경에서 메모리 사용량이 크다.
+
+### 해결
+
+GitHub Actions 자동 검증에서는 `gitlab-rails runner` 대신 `gitlab-psql`로 PostgreSQL을 직접 조회한다.
+
+#### 프로젝트 수 확인
+```
+docker exec gitlab gitlab-psql -d gitlabhq_production -t -A -c "SELECT COUNT(*) FROM projects;"
+```
+
+#### Runner 수 확인
+```
+docker exec gitlab gitlab-psql -d gitlabhq_production -t -A -c "SELECT COUNT(*) FROM ci_runners;"
+```
+
+#### 정상 기준
+```
+PROJECT_COUNT >= 1
+RUNNER_COUNT >= 1
+```
+
+### 기준
+
+- 수동 확인: `gitlab-rails runner` 사용 가능
+- GitHub Actions 자동 검증: `gitlab-psql` 사용
+
+---
