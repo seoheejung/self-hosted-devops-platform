@@ -363,28 +363,36 @@ GitHub Actions
 GitLab Repository
  → GitLab Pipeline
  → Validate
- → Test
- → Docker Build
- → Deploy
+ → Deploy Check
+ → Pipeline Passed
 ```
 
 ### 작업 내용
 - `.gitlab-ci.yml` Pipeline 구조 작성
+- `validate` / `deploy-check` Stage 구성
 - Validate Job 구성
-- Test Job 구성
-- Docker socket 사용 여부 결정
+- Deploy Check Job 구성
+- Docker socket 사용 여부 확인
 - Docker Compose config 검증 Job 구성
 - Docker Image Build 필요 여부 판단
-- Deploy Job 실행 범위 결정
+- Deploy Job 실행 가능 범위 확인
 - Pipeline 실행 결과 검증
 
 ### 구현 목표
 - GitLab Runner 기반 Pipeline 구조 확보
-- Repository 변경 시 Pipeline 자동 실행
-- Validate/Test Job 정상 실행
-- Docker Compose 검증 가능 여부 확인
-- Docker Build 및 Deploy Job 확장 기준 정리
-- 실제 배포 전 안전한 검증 Pipeline 확보
+- Repository 변경 시 Pipeline 자동 실행 확인
+- GitLab Runner tag 기반 Job 실행 검증
+- CI Job Container 안에서 Docker 명령 실행 가능 여부 확인
+- Docker Compose config 검증
+- Docker Build 및 실제 Deploy Job 확장 기준 정리
+- 실제 배포 명령 실행 전 안전한 검증 Pipeline 확보
+
+### 완료 기준
+
+- `validate-compose` Job `Passed`
+- `deploy-readiness-check` Job `Passed`
+- 전체 Pipeline `Passed`
+- 실제 배포 명령은 수행하지 않음
 
 ---
 

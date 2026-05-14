@@ -23,7 +23,7 @@ GitLab Pipeline
         ↓
 
 Mini PC
- └─ Docker Compose 기반 서비스 반영
+ └─ Docker Compose config 검증 및 배포 단계 실행 가능 여부 확인
 ```
 
 ---
@@ -95,21 +95,29 @@ Repository 구조와 Docker Compose 설정이 정상인지 확인한다.
 - GitLab Runner 문서 존재 여부
 - Docker Compose 설정 문법 검증
 
+### 검증 대상
+```
+README.md
+docs/gitlab-runner.md
+infra/compose/docker-compose.gitlab.yml
+```
+
 ### 구성 기준
 
-| 항목 | 내용 |
-| --- | --- |
-| Stage | `validate` |
-| 목적 | Repository 구조와 Compose 설정 검증 |
-| 검증 대상 | README, docs, GitLab Compose 파일 |
-| 추가 검증 | Docker Compose config 문법 확인 |
-| 적용 시점 | 기본 Pipeline 구성 이후 |
+| 항목        | 내용                                        |
+| --------- | ----------------------------------------- |
+| Stage     | `validate`                                |
+| 목적        | Repository 구조와 Compose 설정 검증              |
+| 검증 대상     | README, docs, GitLab Compose 파일           |
+| Docker 검증 | `docker version`, `docker compose config` |
+| 실패 처리     | 검증 실패 시 Pipeline 중단                       |
+
 
 ### 판단
 
-초기 Validate Job은 필수 파일 존재 여부 확인부터 시작한다.
+Validate Job은 실제 배포 전에 반드시 통과해야 하는 사전 검증 단계다.
 
-Docker Compose config 검증은 Docker socket 전달 설정이 확정된 뒤 추가한다.
+Docker Compose 설정 오류가 있는 상태에서 Deploy Job이 실행되면 기존 GitLab Container에 영향을 줄 수 있으므로, Deploy 전에 Compose config 검증을 수행한다.
 
 ---
 
@@ -120,10 +128,15 @@ Docker Compose config 검증은 Docker socket 전달 설정이 확정된 뒤 추
 Pipeline 안에서 기본 테스트 Job을 실행하여 Runner tag 매칭과 Job 실행 흐름을 확인한다.
 
 ### 검증 항목
-
 - Runner tag 매칭
 - Job 로그 출력
 - Job 상태 `Passed`
+
+### 판단
+
+현재 Repository에는 별도 애플리케이션 테스트 코드가 없다.
+
+그래서 Test Job은 애플리케이션 단위 테스트가 아니라 GitLab Runner 기반 Job 실행 흐름 검증으로 사용한다.
 
 ---
 
@@ -131,24 +144,20 @@ Pipeline 안에서 기본 테스트 Job을 실행하여 Runner tag 매칭과 Job
 
 ### 목적
 
-Docker Image build가 필요한 서비스에 대해 Image build 단계를 구성한다.
+Docker Image build가 필요한 서비스에 대해 Image build 단계를 구성할 수 있는지 검토한다.
 
-### 현재 판단
+### 적용 기준
 
 현재 GitLab 서버는 `gitlab/gitlab-ce:latest` 이미지를 사용하므로 직접 build하지 않는다.
 
-| 대상 | 판단 |
-| --- | --- |
-| GitLab Omnibus Container | 직접 build하지 않음 |
-| Nginx Custom Image | Reverse Proxy 단계에서 검토 |
-| Monitoring Exporter | Monitoring 단계에서 검토 |
-| 테스트용 App | Pipeline 검증용으로 추가 가능 |
+직접 build할 Dockerfile이 생기면 `docker-build` stage에 별도 Job을 추가한다.
 
-### Phase 5 기준
-
-Docker Build Job은 구조만 확보한다.
-
-실제 운영 이미지 build는 대상 서비스가 생긴 뒤 추가한다.
+| 대상                       | 판단                    |
+| ------------------------ | --------------------- |
+| GitLab Omnibus Container | 직접 build하지 않음         |
+| Nginx Custom Image       | Reverse Proxy 단계에서 검토 |
+| Monitoring Exporter      | Monitoring 단계에서 검토    |
+| 테스트용 App                 | Pipeline 검증용으로 추가 가능  |
 
 ---
 
@@ -156,7 +165,7 @@ Docker Build Job은 구조만 확보한다.
 
 ### 목적
 
-GitLab Pipeline에서 Mini PC의 Docker Compose 기반 배포 명령을 실행한다.
+GitLab Pipeline에서 Mini PC의 Docker Compose 기반 배포 명령을 실행할 수 있는 구조를 검토한다.
 
 ### 배포 방식 후보
 
@@ -190,7 +199,14 @@ GitLab Pipeline
  → GitLab Pipeline 실행 환경 영향
 ```
 
-Phase 5에서는 GitLab 서버 자체 재배포보다 테스트 서비스 또는 설정 검증 중심으로 진행한다.
+따라서 현재 Phase 5에서는 GitLab 서버 자체 재배포보다 테스트 서비스 또는 설정 검증 중심으로 Deploy Job 범위를 정한다.
+
+실제 서비스 배포 자동화는 다음 조건을 만족한 뒤 별도 단계에서 검토한다.
+
+- 배포 대상 서비스가 명확함
+- 실제 배포 명령 실행 시 기존 GitLab Container에 영향이 없음
+- 실패 시 수동 복구 절차가 있음
+- Rollback 기준이 문서화되어 있음
 
 ---
 
@@ -209,72 +225,81 @@ GitLab Runner Container는 Host Docker socket을 마운트한다.
   volumes = ["/cache", "/var/run/docker.sock:/var/run/docker.sock"]
 ```
 
+설정 변경 후 Runner Container를 재시작한다.
+
+```
+docker restart gitlab-runner
+```
+
 ### 판단
 
 Docker Compose 검증이나 Docker Build Job을 CI Job에서 실행하려면 Docker socket 전달이 필요하다.
 
-Docker socket mount는 권한이 강하므로 신뢰 가능한 내부 Repository에서만 사용한다.
+Docker socket mount는 Host Docker daemon 접근 권한을 제공하므로 신뢰 가능한 내부 Repository에서만 사용한다.
 
 ---
 
-## 초기 `.gitlab-ci.yml` 구성안
+## `.gitlab-ci.yml` 구성 기준
 
-Phase 5 초기 검증용 Pipeline은 실제 배포보다 GitLab Runner 기반 Pipeline 흐름 검증을 우선한다.
+실제 Pipeline 코드는 Repository 루트의 `.gitlab-ci.yml`에 작성한다.
+
+### 구성 목적
+
+Phase 5의 목표는 GitLab Repository 변경 사항을 Mini PC 서비스 배포까지 연결할 수 있는 Pipeline 기반을 확보하는 것이다.
+
+다만 현재 단계에서 바로 실제 배포를 실행하면 다음 문제가 생길 수 있다.
+
+- GitLab 서버 자체를 Pipeline으로 재배포할 경우 순환 의존성이 생길 수 있음
+- Docker socket 권한 설정이 완전히 검증되지 않은 상태에서 Host Docker daemon에 접근하게 됨
+- Compose 설정 오류가 있을 경우 기존 GitLab Container에 영향을 줄 수 있음
+- 아직 직접 build할 애플리케이션 Dockerfile이 없으므로 Docker Image Build Job을 강제로 만들 필요가 없음
+
+그래서 이번 Phase 5에서는 다음 항목을 함께 검증한다.
+
+1. GitLab Runner가 실제 Repository의 Pipeline Job을 정상 실행하는지 확인한다.
+2. CI Job Container 안에서 Docker 명령을 실행할 수 있는지 확인한다.
+3. Docker Compose config 검증이 가능한지 확인한다.
+4. Deploy Job 실행 범위를 확인한다.
+
+이 검증이 통과하면 Phase 5에서 목표로 한 Pipeline 실행 구조와 Docker Compose config 검증이 완료된 것으로 판단한다.
 
 ### 구성 기준
 
-| 항목 | 내용 |
-| --- | --- |
-| Stage | `validate`, `test` |
-| 목적 | Repository 구조 확인 및 Runner Job 실행 검증 |
-| Runner tag | `docker`, `mini-pc`, `wsl2` |
-| 기본 이미지 | `alpine:latest` |
-| Docker 명령 사용 | 제외 |
-
-### 검증 항목
-
-- 필수 파일 존재 여부 확인
-- GitLab Runner가 Job을 정상 수신하는지 확인
-- Job 로그가 정상 출력되는지 확인
-- Pipeline `Passed` 확인
-
-### 판단
-
-초기 Pipeline에서는 Docker 명령을 사용하지 않는다.
-
-Docker 명령 검증은 Docker socket 전달 설정을 확정한 뒤 별도 단계에서 추가한다.
+| 항목               | 내용                           |
+| ---------------- | ---------------------------- |
+| Pipeline 파일      | `.gitlab-ci.yml`             |
+| Runner tag       | `docker`, `mini-pc`, `wsl2`  |
+| Validate Job     | Docker Compose config 검증     |
+| Test Job         | Runner Job 실행 검증             |
+| Docker Build Job | 직접 build 대상이 생긴 뒤 추가         |
+| Deploy Job       | 실제 배포 전 실행 가능 범위 확인          |
+| Docker 명령 사용     | Docker socket 전달 설정 필요       |
 
 ---
 
-## Docker Compose 검증용 Pipeline 구성안
-
-Docker Compose 검증 Job은 Docker socket 전달 설정을 적용한 뒤 사용한다.
+## Docker Compose 검증 기준
 
 ### 목적
 
 GitLab Runner Job 안에서 Docker 명령을 실행할 수 있는지 확인하고, Compose 설정 파일의 문법 오류를 사전에 검증한다.
 
-### 구성 기준
-
-| 항목 | 내용 |
-| --- | --- |
-| Stage | `validate` |
-| 목적 | Docker Compose 설정 검증 |
-| 필요 조건 | CI Job Container에서 Docker daemon 접근 가능 |
-| 주요 검증 | `docker version`, `docker compose config` |
-| 적용 시점 | Docker socket 전달 설정 이후 |
+### 주요 검증
+```
+docker version
+docker compose -f infra/compose/docker-compose.gitlab.yml config
+```
 
 ### 판단
 
-현재 Phase 5 초반에는 Docker Compose 검증을 바로 적용하지 않는다.
+Docker Compose 검증은 실제 배포 전에 반드시 통과해야 하는 검증 단계다.
 
-먼저 기본 Pipeline이 `Passed` 되는 것을 확인한 뒤, Docker socket 전달 설정을 확정하고 Docker Compose 검증 Job을 추가한다.
+이 단계에서 실패하면 Deploy Job으로 진행하지 않는다.
 
 ---
 
 ## Deploy Job 구성안
 
-Deploy Job은 실제 배포 명령을 바로 실행하지 않고, 초기에는 dry-run 또는 상태 확인 중심으로 구성한다.
+Deploy Job은 실제 배포 명령을 바로 실행하지 않고, 먼저 상태 확인 또는 readiness check 중심으로 구성한다.
 
 ### 목적
 
@@ -284,7 +309,7 @@ GitLab Runner가 Mini PC 내부에서 배포 단계 Job을 실행할 수 있는�
 
 | 항목 | 내용 |
 | --- | --- |
-| Stage | `deploy` |
+| Stage | `deploy-check` |
 | 초기 동작 | 배포 명령 직접 실행 대신 상태 확인 |
 | 실제 배포 | 배포 대상 서비스가 명확해진 뒤 적용 |
 | 실행 위치 | Mini PC WSL2 Ubuntu의 GitLab Runner |
@@ -292,11 +317,11 @@ GitLab Runner가 Mini PC 내부에서 배포 단계 Job을 실행할 수 있는�
 
 ### 판단
 
-GitLab 서버 자체를 GitLab Pipeline으로 재배포하는 구조는 순환 의존성이 생길 수 있다.
+현재 Phase 5에서는 실제 Deploy Job 대신 배포 단계 실행 가능 여부를 확인한다.
 
-따라서 Phase 5에서는 GitLab 서버 자체 재배포가 아니라, 테스트 서비스 또는 설정 검증 중심으로 Deploy Job 범위를 정한다.
+이 Job은 실제 배포 명령을 실행하지 않고, Runner가 배포 단계 Job을 정상 수신하고 실행할 수 있는지만 확인한다.
 
-실제 `docker compose up -d` 기반 배포는 배포 대상 서비스와 롤백 기준이 정리된 뒤 적용한다.
+실제 서비스 배포 자동화는 Phase 5 범위에 포함하지 않는다.
 
 ---
 
@@ -326,5 +351,57 @@ GitLab 서버 자체를 GitLab Pipeline으로 재배포하는 구조는 순환 �
 - Deploy Job이 의도한 명령만 실행
 - 기존 GitLab Container에 영향 없음
 - 실패 시 수동 복구 가능
+
+---
+
+## 검증 결과
+
+### Pipeline 실행 결과
+
+| 항목 | 결과 |
+| --- | --- |
+| Pipeline ID | `#4` |
+| Branch | `feature/gitlab-ci-pipeline-validation` |
+| Commit | `46e67565` |
+| Status | `Passed` |
+| Job 수 | 2 |
+| 실행 시간 | 17초 |
+
+### Job 결과
+
+| Job | Stage | 결과 | 확인 내용 |
+| --- | --- | --- | --- |
+| `validate-compose` | `validate` | Passed | Docker 접근 및 Docker Compose config 검증 성공 |
+| `deploy-readiness-check` | `deploy-check` | Passed | 배포 단계 Job 실행 가능 여부 확인 성공 |
+
+### validate-compose 확인
+
+`validate-compose` Job에서 Docker CLI와 Host Docker daemon 접근이 정상 동작했다.
+
+```text
+docker version
+docker compose -f infra/compose/docker-compose.gitlab.yml config
+```
+
+Docker socket 전달 설정이 정상 반영되어 CI Job Container 안에서 Docker 명령을 실행할 수 있었다.
+
+### deploy-readiness-check 확인
+
+`deploy-readiness-check` Job에서 배포 단계 Job 실행 가능 여부를 확인했다.
+
+```
+Deploy readiness check
+uname -a
+test -f infra/compose/docker-compose.gitlab.yml
+Job succeeded
+```
+
+### 판단
+
+GitLab Runner가 GitLab Repository의 Pipeline Job을 정상 수신하고 실행했다.
+
+`validate-compose`와 `deploy-readiness-check`가 모두 `Passed` 되었으므로 Phase 5의 Pipeline 검증 기준을 충족했다.
+
+실제 배포 명령은 수행하지 않았다.
 
 ---

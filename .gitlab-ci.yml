@@ -1,13 +1,42 @@
+# Pipeline 실행 단계 정의
+# validate: 배포 전 Docker Compose 설정을 검증
+# deploy-check: 실제 배포 전 Runner에서 배포 단계 Job 실행 가능 여부를 확인
 stages:
-  - test
+  - validate
+  - deploy-check
 
-runner-test:
-  stage: test
-  image: alpine:latest
+# 모든 Job에 공통으로 적용할 Runner tag
+# Phase 4에서 등록한 GitLab Runner tag와 일치해야 Job이 실행됨
+default:
   tags:
     - docker
     - mini-pc
     - wsl2
+
+# Docker Compose 설정 검증 Job
+# 실제 배포는 하지 않고, Docker 접근 가능 여부와 compose 파일 문법만 확인
+validate-compose:
+  stage: validate
+  image: docker:26-cli
   script:
-    - echo "GitLab Runner test"
+    # CI Job Container 안에서 Host Docker daemon에 접근 가능한지 확인
+    - docker version
+
+    # Docker Compose 파일 문법과 환경 변수 치환 결과를 검증
+    # 실패하면 Pipeline이 중단됨
+    - docker compose -f infra/compose/docker-compose.gitlab.yml config
+
+# 배포 단계 실행 가능 여부 확인 Job
+# 실제 배포 명령은 실행하지 않음
+deploy-readiness-check:
+  stage: deploy-check
+  image: alpine:latest
+  script:
+    # deploy-check stage가 Runner에서 정상 실행되는지 확인
+    - echo "Deploy readiness check"
+
+    # Job이 실행되는 컨테이너 환경 정보 확인
     - uname -a
+
+    # 배포 대상 Compose 파일이 Repository에 존재하는지 확인
+    - test -f infra/compose/docker-compose.gitlab.yml
