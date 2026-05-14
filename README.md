@@ -141,6 +141,7 @@ self-hosted-devops-platform
 │  ├─ monitoring.md
 │  ├─ backup-strategy.md
 │  ├─ troubleshooting.md
+│  ├─ reverse-proxy-ssl.md
 │  └─ optimization.md
 │
 ├─ infra/
@@ -250,6 +251,7 @@ feature/xxx
 | [github-actions-deploy.md](docs/github-actions-deploy.md) | GitHub self-hosted runner를 통한 Mini PC 내부 Docker Compose 배포 자동화 구성 |
 | [gitlab-runner.md](docs/gitlab-runner.md) | Docker Executor 기반 GitLab Runner 등록, 테스트 Pipeline 실행, Runner 운영 기준 |
 | [gitlab-ci-pipeline.md](docs/gitlab-ci-pipeline.md) | GitLab Runner 기반 Build/Test/Docker Build/Deploy Pipeline 구성 |
+| [reverse-proxy-ssl.md](docs/reverse-proxy-ssl.md) | Nginx Reverse Proxy 및 HTTPS 접근 구성 |
 | [monitoring.md](docs/monitoring.md) | Prometheus/Grafana 기반 모니터링 구성 |
 | [backup-strategy.md](docs/backup-strategy.md) | GitLab 데이터 백업 및 복구 전략 |
 | [troubleshooting.md](docs/troubleshooting.md) | 구축 및 운영 중 발생한 문제와 해결 기록 |
