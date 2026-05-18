@@ -17,20 +17,18 @@ services:
 
     # Host Port : Container Port
     ports:
-      - "8080:80"    # Main PC에서 GitLab Web UI 접근
-      - "8443:443"   # HTTPS 접속용 예비 포트
+      - "8080:80"    # 복구 경로: Main PC에서 기존 방식으로 GitLab Web UI 접근
       - "2222:22"    # GitLab Repository SSH 접속용 포트
 
     environment:
       # GitLab Omnibus 설정
       GITLAB_OMNIBUS_CONFIG: |
-        # Main PC에서 접근 가능한 Mini PC 내부 IP 기준 URL
+        # 기존 복구 경로 유지
         # MINI_PC_HOST는 GitHub Actions Secret에서 주입
         external_url 'http://${MINI_PC_HOST}:8080'
 
-        # external_url에 8080 포트를 사용하면 GitLab 내부 Nginx도 8080으로 listen할 수 있음
-        # 하지만 Compose 포트 매핑은 Host 8080 → Container 80 구조이므로
-        # 컨테이너 내부 Nginx는 80번 포트로 고정한다.
+        # Compose 포트 매핑은 Host 8080 → Container 80 구조이므로
+        # GitLab 내부 Nginx는 80번 포트로 고정한다.
         nginx['listen_port'] = 80
         nginx['listen_https'] = false
 
@@ -49,3 +47,29 @@ services:
       - /home/gali/gitlab/config:/etc/gitlab      # GitLab 설정 파일
       - /home/gali/gitlab/logs:/var/log/gitlab    # GitLab 로그 파일
       - /home/gali/gitlab/data:/var/opt/gitlab    # GitLab Repository, DB, 업로드 데이터
+
+  nginx:
+    # GitLab 앞단 Reverse Proxy용 Nginx
+    image: nginx:stable-alpine
+
+    # 컨테이너 이름 고정
+    container_name: gitlab-nginx
+
+    # 컨테이너 중지 시 수동 중지가 아니면 자동 재시작
+    restart: unless-stopped
+
+    # Host Port : Container Port
+    ports:
+      - "80:80"      # http://gitlab.local 접근 후 HTTPS로 redirect
+      - "443:443"    # https://gitlab.local 접근
+
+    # Nginx 설정 파일 및 SSL 인증서 mount
+    volumes:
+      - ../../nginx/nginx.conf:/etc/nginx/nginx.conf:ro      # Nginx 전역 설정
+      - ../../nginx/conf.d:/etc/nginx/conf.d:ro              # GitLab reverse proxy server block
+      - ../../nginx/ssl:/etc/nginx/ssl:ro                    # SSL 인증서 / private key
+
+    # GitLab 컨테이너 생성 이후 Nginx 생성
+    # 단, GitLab application readiness까지 보장하지는 않는다.
+    depends_on:
+      - gitlab

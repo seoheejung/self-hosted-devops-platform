@@ -14,7 +14,7 @@ Main PC
  → GitLab Container
 ```
 
-Phase 6에서는 GitLab 앞단에 Nginx Reverse Proxy를 두고, `gitlab.local` 도메인으로 접근하는 구조를 구성한다.
+GitLab 앞단에 Nginx Reverse Proxy를 두고, `gitlab.local` 도메인으로 접근하는 구조를 구성한다.
 
 ```
 Main PC
@@ -62,9 +62,10 @@ self-hosted-devops-platform
 ├─ nginx/
 │  ├─ conf.d/
 │  │  └─ gitlab.conf
-│  └─ ssl/
-│     ├─ gitlab.local.crt
-│     └─ gitlab.local.key
+│  ├─ ssl/
+│  │  ├─ gitlab.local.crt
+│  │  └─ gitlab.local.key
+│  └─ nginx.conf
 │
 └─ docs/
    └─ reverse-proxy-ssl.md
@@ -114,6 +115,7 @@ Mini PC WSL2 Ubuntu에서 `gitlab.local`용 자체 서명 인증서를 생성한
 
 - Nginx image 사용
 - Host `80`, `443` 포트 사용
+- `nginx/nginx.conf` mount
 - `nginx/conf.d` mount
 - `nginx/ssl` mount
 - GitLab Container와 같은 Docker network 사용
@@ -124,7 +126,7 @@ Mini PC WSL2 Ubuntu에서 `gitlab.local`용 자체 서명 인증서를 생성한
 
 GitLab은 `external_url`을 기준으로 Web UI 링크, redirect URL, clone URL을 생성한다.
 
-Phase 6에서는 먼저 Nginx Reverse Proxy 접근을 검증한다.
+먼저 Nginx Reverse Proxy 접근을 검증한다.
 
 > `external_url` 변경은 GitLab Web UI, clone URL, GitLab Runner 통신에 영향을 줄 수 있으므로 바로 적용하지 않고 별도 검토한다.
 
@@ -155,9 +157,9 @@ Phase 6에서는 먼저 Nginx Reverse Proxy 접근을 검증한다.
 
 ## 주의사항
 
-- `nginx/ssl/`은 Git에 commit하지 않는다.
+- `nginx/ssl/*.key`, `nginx/ssl/*.crt`, `nginx/ssl/*.pem` 파일은 Git에 commit하지 않는다.
 - 자체 서명 인증서는 브라우저 신뢰 경고가 발생할 수 있다.
 - 기존 `http://172.30.1.69:8080` 접근 경로는 복구 경로로 유지한다.
-- Phase 6에서는 외부 인터넷 공개가 아니라 내부망 HTTPS 접근만 검증한다.
+- 외부 인터넷 공개가 아니라 내부망 HTTPS 접근만 검증한다.
 
 ---
