@@ -411,12 +411,12 @@ GitLab Repository
 - GitLab Backup 생성 가능 여부 확인
 - GitLab Omnibus 장기 운영 가능 여부 판단
 
-#### 구현 목표
-
-- GitLab Container 실행 여부가 아니라 DB 내부 데이터 유지 여부를 기준으로 운영 가능성 판단
-- 장기 미가동 후 재기동 시 Project / Runner / root 계정 상태 유지 확인
-- DB 재초기화 발생 여부 확인
-- Reverse Proxy / Monitoring / 운영 문서화 확장 가능 여부 결정
+#### 검증 결과
+- 기존 GitLab 프로젝트가 유지되지 않음
+- GitLab Runner 등록 정보가 유지되지 않음
+- root 계정이 재생성됨
+- `application_settings`가 재생성됨
+- `gitlab-rails-db-migrate` 로그에서 `db:schema:load` 실행 확인
 
 ---
 
