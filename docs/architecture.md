@@ -1,6 +1,6 @@
 # Architecture
 
-> Main PC, GitHub Actions, Mini PC WSL2 Ubuntu, GitLab Container, GitLab Runner, Nginx Reverse Proxy로 구성된 Self-Hosted DevOps Platform의 전체 구조를 정리한다.
+> Main PC, GitHub Actions, Mini PC WSL2 Ubuntu, GitLab Container, GitLab Runner로 구성된 Self-Hosted DevOps Platform의 전체 구조를 정리한다.
 
 ---
 
@@ -44,8 +44,13 @@
  │
  ├─ GitLab Omnibus Container
  ├─ GitLab Runner Container
- ├─ Container Registry
- ├─ Nginx
+ └─ Docker Executor
+
+          Phase 6 운영 안정성 검증 통과 후 확장
+                     ↓
+
+[ Extended Components ]
+ ├─ Nginx Reverse Proxy
  ├─ Prometheus
  ├─ Grafana
  └─ Deployment Target
@@ -106,7 +111,7 @@ GitLab Repository
 | `8080` | `80` | GitLab Web UI 직접 접근 |
 | `2222` | `22` | GitLab Repository SSH |
 
-### Phase 6 목표 구성
+### Phase 7 목표 구성
 
 | Host Port | Container Port | 용도 |
 | --- | --- | --- |
@@ -160,13 +165,15 @@ Mini PC Services
  └─ Application Services
 ```
 
-Phase 5에서는 GitLab Runner 기반 Pipeline 검증을 완료했고, 이후 단계에서 Docker Build와 실제 배포 자동화를 확장한다.
+Phase 5에서는 GitLab Runner 기반 Pipeline 검증을 완료했다.
+
+Phase 6에서는 GitLab 운영 안정성을 검증하고, Phase 7 이후 Reverse Proxy, Monitoring, 실제 배포 자동화 범위로 확장한다.
 
 ---
 
 ## Reverse Proxy 접근 구조
 
-Phase 6에서는 GitLab Container 앞단에 Nginx Reverse Proxy를 추가한다.
+Phase 7에서는 GitLab Container 앞단에 Nginx Reverse Proxy를 추가한다.
 
 ```text
 Main PC Browser
@@ -175,6 +182,22 @@ Main PC Browser
  → GitLab Container
 ```
 
-기존 `http://172.30.1.69:8080` 접근 경로는 Phase 6 작업 중 복구 경로로 유지한다.
+기존 `http://172.30.1.69:8080` 접근 경로는 Phase 7 작업 중 복구 경로로 유지한다.
 
 ---
+
+## 운영 안정성 검증 위치
+
+GitLab Container가 실행 중이라고 해서 기존 GitLab 인스턴스가 유지됐다고 판단하지 않는다.
+
+Phase 6에서는 다음 항목을 기준으로 GitLab 운영 안정성을 확인한다.
+
+| 항목 | 확인 내용 |
+| --- | --- |
+| GitLab DB | `application_settings`, `users` 생성 시각 확인 |
+| Project | 기존 GitLab Project 유지 여부 확인 |
+| Runner | GitLab Runner 등록 정보 유지 여부 확인 |
+| DB migration log | `db:schema:load` 재발 여부 확인 |
+| Backup | GitLab Backup 생성 가능 여부 확인 |
+
+Phase 6 검증을 통과한 뒤 Reverse Proxy / SSL, Monitoring, 운영 문서화 단계로 확장한다.

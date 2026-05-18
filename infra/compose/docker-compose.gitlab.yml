@@ -1,7 +1,7 @@
 services:
   gitlab:
     # GitLab Community Edition Omnibus 이미지
-    image: gitlab/gitlab-ce:latest
+    image: gitlab/gitlab-ce:18.11.2-ce.0
 
     # 컨테이너 이름 고정
     container_name: gitlab

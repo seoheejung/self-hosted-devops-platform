@@ -257,7 +257,7 @@ docker inspect gitlab --format '{{json .Mounts}}' | python3 -m json.tool
 /home/gali/gitlab/data   → /var/opt/gitlab
 ```
 
-### 2. GitLab DB 기준 프로젝트 확인
+#### 2. GitLab DB 기준 프로젝트 확인
 ```
 docker exec -it gitlab gitlab-rails runner "puts \"projects=#{Project.count}\"; Project.order(:id).each { |p| puts \"#{p.id} #{p.full_path}\" }"
 ```
@@ -267,7 +267,7 @@ docker exec -it gitlab gitlab-rails runner "puts \"projects=#{Project.count}\"; 
 projects=0
 ```
 
-### 3. GitLab DB 기준 Runner 확인
+#### 3. GitLab DB 기준 Runner 확인
 ```
 docker exec -it gitlab gitlab-rails runner "puts \"runners=#{Ci::Runner.count}\"; Ci::Runner.order(:id).each { |r| puts \"#{r.id} #{r.description} active=#{r.active}\" }"
 ```
@@ -275,6 +275,22 @@ docker exec -it gitlab gitlab-rails runner "puts \"runners=#{Ci::Runner.count}\"
 #### 문제 발생 시 결과
 ```
 runners=0
+```
+
+#### 4. GitLab DB bootstrap 로그 확인
+
+```bash
+docker exec -it gitlab bash -lc '
+grep -RInE "db:schema:load|Creating the default ApplicationSetting record|Administrator account created" \
+/var/log/gitlab/gitlab-rails/gitlab-rails-db-migrate-*.log 2>/dev/null
+'
+```
+
+#### 문제 발생 시 확인된 로그
+```
+Running db:schema:load rake task
+Creating the default ApplicationSetting record.
+Administrator account created
 ```
 
 ### 판단
@@ -286,6 +302,9 @@ projects=0
 runners=0
 ```
 > 즉, UI 표시 문제가 아니라 현재 `/home/gali/gitlab/data` 기준 GitLab DB가 빈 상태로 초기화된 것으로 판단한다.
+
+> `gitlab-rails-db-migrate` 로그에서 `db:schema:load`, `Creating the default ApplicationSetting record`, `Administrator account created`가 확인되면 GitLab Rails DB가 새로 bootstrap된 상태로 본다.
+
 
 #### 가능한 원인
 - Phase 4 수행 당시와 현재 GitLab 데이터 경로가 달랐을 가능성
@@ -317,7 +336,7 @@ docker run -d \
   --restart unless-stopped \
   -v /home/gali/gitlab-runner/config:/etc/gitlab-runner \
   -v /var/run/docker.sock:/var/run/docker.sock \
-  gitlab/gitlab-runner:latest
+  gitlab/gitlab-runner:alpine-v18.11.2
 ```
 
 #### Runner 등록
@@ -533,3 +552,4 @@ RUNNER_COUNT >= 1
 - GitHub Actions 자동 검증: `gitlab-psql` 사용
 
 ---
+
