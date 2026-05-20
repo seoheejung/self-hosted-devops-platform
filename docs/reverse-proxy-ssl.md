@@ -10,7 +10,7 @@
 
 ```text
 Main PC
- → http://172.30.1.69:8080
+ → http://172.30.1.67:8080
  → GitLab Container
 ```
 
@@ -23,7 +23,7 @@ Main PC
  → GitLab Container
 ```
 
-기존 `http://172.30.1.69:8080` 접근 경로는 복구 경로로 유지한다.
+기존 `http://172.30.1.67:8080` 접근 경로는 복구 경로로 유지한다.
 
 ---
 
@@ -47,7 +47,7 @@ Main PC
 | HTTPS | 자체 서명 인증서 |
 | 외부 접근 | `https://gitlab.local` |
 | 내부 전달 | `http://gitlab:80` |
-| 기존 복구 경로 | `http://172.30.1.69:8080` |
+| 기존 복구 경로 | `http://172.30.1.67:8080` |
 
 ---
 
@@ -146,7 +146,7 @@ GitLab은 `external_url`을 기준으로 Web UI 링크, redirect URL, clone URL�
 - GitLab 로그인 페이지 표시
 - root 로그인 가능
 - Project 목록 접근 가능
-- 기존 `http://172.30.1.69:8080` 접근 유지
+- 기존 `http://172.30.1.67:8080` 접근 유지
 
 ### Runner 기준
 
@@ -159,7 +159,7 @@ GitLab은 `external_url`을 기준으로 Web UI 링크, redirect URL, clone URL�
 
 - `nginx/ssl/*.key`, `nginx/ssl/*.crt`, `nginx/ssl/*.pem` 파일은 Git에 commit하지 않는다.
 - 자체 서명 인증서는 브라우저 신뢰 경고가 발생할 수 있다.
-- 기존 `http://172.30.1.69:8080` 접근 경로는 복구 경로로 유지한다.
+- 기존 `http://172.30.1.67:8080` 접근 경로는 복구 경로로 유지한다.
 - 외부 인터넷 공개가 아니라 내부망 HTTPS 접근만 검증한다.
 
 ---

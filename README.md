@@ -443,7 +443,7 @@ GitLab Repository
 - Git 기반 변경 이력 확보
 - Nginx Reverse Proxy 기반 GitLab 접근 구조 구성
 - HTTPS 기반 GitLab Web UI 접근 확인
-- 기존 `http://172.30.1.69:8080` 접근 경로는 복구 경로로 유지
+- 기존 `http://172.30.1.67:8080` 접근 경로는 복구 경로로 유지
 
 ---
 

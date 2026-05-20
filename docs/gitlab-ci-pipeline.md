@@ -34,7 +34,7 @@ Mini PC
 
 | 항목 | 기준 |
 | --- | --- |
-| GitLab Web UI | `http://172.30.1.69:8080` 접근 가능 |
+| GitLab Web UI | `http://172.30.1.67:8080` 접근 가능 |
 | GitLab Container | `healthy` 상태 |
 | GitLab Runner | `Online / Idle` 상태 |
 | Runner Tags | `docker`, `mini-pc`, `wsl2` |

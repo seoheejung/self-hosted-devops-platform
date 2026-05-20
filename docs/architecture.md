@@ -122,7 +122,7 @@ GitLab Repository
 
 ### 현재 GitLab Web UI 접근 주소
 ```
-http://172.30.1.69:8080
+http://172.30.1.67:8080
 ```
 
 ---
@@ -182,7 +182,7 @@ Main PC Browser
  → GitLab Container
 ```
 
-기존 `http://172.30.1.69:8080` 접근 경로는 Phase 7 작업 중 복구 경로로 유지한다.
+기존 `http://172.30.1.67:8080` 접근 경로는 Phase 7 작업 중 복구 경로로 유지한다.
 
 ---
 
