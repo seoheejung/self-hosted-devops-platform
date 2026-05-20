@@ -20,9 +20,10 @@
 - [ ] Phase 3. GitLab 서버 구축
 - [ ] Phase 4. GitLab Runner 분리 구성
 - [ ] Phase 5. CI/CD Pipeline 구성
-- [ ] Phase 6. Reverse Proxy 및 SSL 구성
-- [ ] Phase 7. Monitoring 구성
-- [ ] Phase 8. 운영 문서화
+- [ ] Phase 6. GitLab 운영 안정성 검증
+- [ ] Phase 7. Reverse Proxy 및 SSL 구성
+- [ ] Phase 8. Monitoring 구성
+- [ ] Phase 9. Backup / 운영 문서화
 
 ---
 
@@ -42,6 +43,8 @@
 - [ ] GitHub Secrets 정상 적용 확인
 - [ ] GitHub self-hosted runner 상태 확인
 - [ ] Git Push 또는 PR Merge 이후 자동 배포 흐름 확인
+- [ ] Workflow `paths` 변경 영향 확인
+- [ ] Mini PC runtime 파일 준비 step 정상 실행 확인
 
 ---
 
@@ -53,6 +56,7 @@
 - [ ] Main PC 브라우저에서 GitLab Web UI 접근 확인
 - [ ] GitLab volume mount 경로 확인
 - [ ] GitLab 데이터 영속성 유지 확인
+- [ ] 기존 복구 경로 접근 확인 (`http://172.30.1.67:8080`)
 
 ---
 
@@ -64,6 +68,7 @@
 - [ ] Runner tag 확인
 - [ ] 테스트 Pipeline 실행 확인
 - [ ] Pipeline `Passed` 확인
+- [ ] Runner URL 영향 확인
 
 ---
 
@@ -71,9 +76,38 @@
 
 - [ ] Docker Compose config 검증
 - [ ] Docker Compose 정상 실행 확인
+- [ ] Container 실행 상태 확인
 - [ ] Volume 정상 마운트 확인
 - [ ] WSL2 환경 정상 동작 확인
 - [ ] Docker Desktop 실행 및 WSL Integration 확인
+
+---
+
+## Reverse Proxy / SSL 검증
+<!-- Nginx, HTTPS, gitlab.local 관련 변경 시 체크 -->
+
+- [ ] Nginx Reverse Proxy Container 정상 실행 확인
+- [ ] Nginx 80/443 포트 publish 확인
+- [ ] Nginx 설정 문법 확인 (`nginx -t`)
+- [ ] `gitlab.local` hosts 해석 확인
+- [ ] HTTP → HTTPS redirect 확인
+- [ ] `https://gitlab.local` 접근 확인
+- [ ] 자체 서명 인증서 경고 확인
+- [ ] `/home/gali/nginx` runtime 경로 확인
+- [ ] SSL 인증서 / private key Git 제외 확인
+- [ ] GitLab `external_url` 변경 여부 검토
+
+---
+
+## Monitoring 검증
+<!-- Prometheus, Grafana, exporter 관련 변경 시 체크 -->
+
+- [ ] Prometheus 메트릭 수집 확인
+- [ ] Grafana Dashboard 정상 표시 확인
+- [ ] Host / Container 리소스 모니터링 확인
+- [ ] GitLab 상태 메트릭 확인
+- [ ] GitLab Runner 상태 메트릭 확인
+- [ ] Nginx 상태 메트릭 확인
 
 ---
 
@@ -81,6 +115,7 @@
 
 - [ ] Container 재시작 후 정상 복구 확인
 - [ ] GitLab runtime data 유지 확인
+- [ ] Nginx runtime file 유지 확인
 - [ ] 장애 발생 시 영향 범위 확인
 - [ ] 롤백 또는 수동 복구 방법 확인
 
@@ -89,6 +124,7 @@
 ## 보안 검증
 
 - [ ] Token, Secret, Password 등 민감 정보 미포함
+- [ ] SSL private key 미포함
 - [ ] 로그에 민감 정보 출력 없음
 - [ ] 외부 노출 포트 검토
 - [ ] Docker socket 사용 여부 검토
@@ -104,17 +140,19 @@
 - [ ] OpenSSH Server 정상 동작 확인
 - [ ] 방화벽 포트 허용 확인
 
-### Reverse Proxy / SSL
+### Git 인증 / Repository 접근
 
-- [ ] Nginx Reverse Proxy 정상 동작 확인
-- [ ] HTTPS 적용 여부 확인
-- [ ] 인증서 갱신 방식 확인
+- [ ] GitHub push 정상 확인
+- [ ] GitLab push 정상 확인
+- [ ] GitLab Personal Access Token 필요 여부 확인
+- [ ] Protected branch 정책 영향 확인
 
-### Monitoring
+### Backup / Restore
 
-- [ ] Prometheus 메트릭 수집 확인
-- [ ] Grafana Dashboard 정상 표시 확인
-- [ ] Host / Container 리소스 모니터링 확인
+- [ ] GitLab backup 생성 확인
+- [ ] GitLab restore 절차 확인
+- [ ] `/home/gali/gitlab` runtime data 백업 대상 확인
+- [ ] `/home/gali/nginx` runtime file 백업 대상 확인
 
 ---
 

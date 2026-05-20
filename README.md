@@ -6,7 +6,7 @@
 - GitLab + Runner 기반 CI/CD 실행 환경 구성
 - Docker Executor 기반 Pipeline 실행 구조 구성
 - Docker Compose 기반 배포 검증 흐름 구성
-- Reverse Proxy 및 HTTPS 접근 구조 구성
+- Nginx Reverse Proxy 및 내부망 HTTPS 접근 구조 구성
 - Prometheus/Grafana 기반 모니터링 구성
 - 제한된 리소스 환경에서 GitLab 운영 가능성 평가
 - Self-hosted GitOps 운영 경험 확보
@@ -86,27 +86,25 @@ Reverse Proxy, HTTPS, Monitoring, Backup, 장애 대응으로 확장 가능한 S
  ├─ WSL2 Ubuntu
  │   ├─ GitHub self-hosted runner
  │   ├─ Docker Compose 실행
- │   └─ GitLab runtime volume
- │       ├─ /home/gali/gitlab/config
- │       ├─ /home/gali/gitlab/data
- │       └─ /home/gali/gitlab/logs
+ │   ├─ GitLab runtime volume
+ │   │   ├─ /home/gali/gitlab/config
+ │   │   ├─ /home/gali/gitlab/data
+ │   │   └─ /home/gali/gitlab/logs
+ │   └─ Nginx runtime files
+ │       ├─ /home/gali/nginx/nginx.conf
+ │       ├─ /home/gali/nginx/conf.d/gitlab.conf
+ │       └─ /home/gali/nginx/ssl
  │
  ├─ GitLab Omnibus Container
  ├─ GitLab Runner Container
+ ├─ Nginx Reverse Proxy Container
  ├─ Docker Executor
  └─ GitLab 운영 안정성 검증
-     ├─ DB bootstrap 여부 확인
-     ├─ Project / Runner 데이터 유지 확인
-     ├─ 재기동 검증
-     └─ 백업/복구 가능성 확인
-
-          안정성 검증 통과 후 확장
-               ↓
 
 [ Extended DevOps Platform ]
- ├─ Reverse Proxy / SSL
  ├─ Prometheus
  ├─ Grafana
+ ├─ Backup / Restore
  └─ Deployment Target
 ```
 
@@ -116,12 +114,14 @@ Main PC
  → GitHub Repository
  → GitHub Actions
  → Mini PC self-hosted runner
+ → Nginx runtime 파일 준비
  → Docker Compose
- → GitLab Container
+ → GitLab / Nginx Container
 ```
 - GitHub-hosted runner는 내부망 사설 IP의 Mini PC에 직접 접근할 수 없으므로 사용하지 않는다.
-
 - Mini PC WSL2 Ubuntu에 GitHub self-hosted runner를 등록하고, 해당 runner가 GitHub Actions job을 받아 Docker Compose를 실행한다.
+- GitHub Actions는 Repository의 Nginx 설정 파일을 Mini PC runtime 경로 `/home/gali/nginx`로 복사한 뒤 Docker Compose를 실행한다.
+- GitLab runtime data는 `/home/gali/gitlab`, Nginx runtime files는 `/home/gali/nginx` 아래에 유지한다.
 
 ---
 
@@ -172,7 +172,9 @@ self-hosted-devops-platform
 │
 ├─ nginx/
 │  ├─ conf.d/
+│  │  └─ gitlab.conf
 │  ├─ ssl/
+│  │  └─ .gitkeep
 │  └─ nginx.conf
 │
 ├─ gitlab/
@@ -199,6 +201,22 @@ self-hosted-devops-platform
 | `/home/<USER>/gitlab/config` | GitLab 설정 파일                    |
 | `/home/<USER>/gitlab/data`   | Repository, DB, 업로드 파일 등 실제 데이터 |
 | `/home/<USER>/gitlab/logs`   | GitLab 로그                       |
+
+### Nginx runtime 파일 경로
+
+- Repository 안의 `nginx/` 디렉토리는 설정 원본이다.
+- 실제 Nginx Container에는 Mini PC WSL2 내부 고정 runtime 경로를 mount한다.
+
+| 경로 | 역할 |
+| --- | --- |
+| `nginx/nginx.conf` | GitHub Repository의 Nginx 전역 설정 원본 |
+| `nginx/conf.d/gitlab.conf` | GitHub Repository의 GitLab Reverse Proxy 설정 원본 |
+| `/home/gali/nginx/nginx.conf` | Nginx Container mount 대상 |
+| `/home/gali/nginx/conf.d/gitlab.conf` | Nginx Container mount 대상 |
+| `/home/gali/nginx/ssl/gitlab.local.crt` | HTTPS 인증서 |
+| `/home/gali/nginx/ssl/gitlab.local.key` | HTTPS private key |
+
+`nginx/ssl/*.crt`, `nginx/ssl/*.key`, `nginx/ssl/*.pem` 파일은 Git에 commit하지 않는다.
 
 ---
 
@@ -423,27 +441,35 @@ GitLab Repository
 ### Phase 7. Reverse Proxy 및 SSL 구성
 
 #### 작업 내용
-- Nginx Reverse Proxy 구성
-- GitLab 접근 도메인 또는 로컬 DNS 구성
-- HTTPS 적용
-- 인증서 갱신 방식 정리
-- `nginx/ssl/` 디렉토리에 자체 서명 인증서 생성
-- Docker Compose로 Nginx Container 실행
-- Nginx 설정 문법 확인
-- GitLab Container와 Reverse Proxy 연결 확인
-
-#### 검증 내용
-- Main PC Windows hosts 파일에 `gitlab.local` 등록
-- `ping gitlab.local` 확인
-- `curl -I http://gitlab.local` 확인
-- `curl -k -I https://gitlab.local` 확인
-- 브라우저에서 `https://gitlab.local` 접속 확인
+- GitLab 앞단에 Nginx Reverse Proxy Container 추가
+- `gitlab.local` 기반 내부망 도메인 접근 구성
+- HTTP → HTTPS redirect 구성
+- 자체 서명 인증서 기반 HTTPS 접근 검증
+- Docker Compose에 `gitlab-nginx` service 추가
+- GitHub Actions Workflow에 `nginx/**` 변경 감지 추가
+- GitHub Actions에서 Nginx runtime 파일 준비 단계 추가
+- Mini PC runtime 경로 `/home/gali/nginx` 기준 Nginx 설정/인증서 mount 구조 구성
+- 기존 GitLab 직접 접근 경로 `http://172.30.1.67:8080` 복구 경로로 유지
+- GitLab Runner 영향 확인 및 Pipeline 실행 검증
 
 #### 구현 목표
-- Git 기반 변경 이력 확보
-- Nginx Reverse Proxy 기반 GitLab 접근 구조 구성
-- HTTPS 기반 GitLab Web UI 접근 확인
-- 기존 `http://172.30.1.67:8080` 접근 경로는 복구 경로로 유지
+- GitLab Web UI를 `https://gitlab.local`로 접근 가능하게 구성
+- GitHub Actions 기반으로 GitLab / Nginx Container를 함께 배포
+- GitHub Actions workspace가 아니라 Mini PC 고정 runtime 경로를 사용해 Nginx 설정과 인증서를 유지
+- 자체 서명 인증서를 사용한 내부망 HTTPS 접근 구조 확보
+- 기존 Runner URL과 GitLab `external_url`은 즉시 변경하지 않고 복구 경로 기준으로 유지
+
+#### 검증 내용
+- GitHub Actions 실행 완료
+- `gitlab-nginx` Container 실행 확인
+- Nginx 80/443 포트 publish 확인
+- `docker exec gitlab-nginx nginx -t` 성공
+- Main PC hosts 설정 확인
+- `gitlab.local → 172.30.1.67` 해석 확인
+- `curl -I http://gitlab.local` 요청 시 `https://gitlab.local` redirect 확인
+- `curl -k -I https://gitlab.local` 접근 확인
+- 브라우저에서 `https://gitlab.local` GitLab Web UI 접근 확인
+- GitLab Runner 검증용 Pipeline `Passed` 확인
 
 ---
 
@@ -471,7 +497,7 @@ GitLab Repository
 
 ---
 
-### Phase 9. 운영 문서화
+### Phase 9. Backup / 운영 문서화
 
 #### 작업 내용
 - 설치 절차 문서화
