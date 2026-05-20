@@ -33,15 +33,12 @@ Main PC
 | Container Runtime | Docker Desktop  |
 | Network           | Main PC와 동일 내부망 |
 
-
-
 ### Main PC 환경
 
 | 항목      | 내용                  |
 | ------- | ------------------- |
 | Browser | GitLab Web UI 접근 확인 |
 | Git     | Repository 작업용      |
-
 
 ---
 
@@ -182,12 +179,15 @@ mkdir -p /home/<USER>/gitlab/logs
 #### 구성 기준
 | 항목 | 내용 |
 | --- | --- |
-| Image | `gitlab/gitlab-ce` |
+| Image | `gitlab/gitlab-ce:18.11.2-ce.0` |
 | HTTP Port | `8080:80` |
 | HTTPS Port | `8443:443` |
 | Git SSH Port | `2222:22` |
 | external_url | `http://${MINI_PC_HOST}:8080` |
 | Volume | `/home/<USER>/gitlab` 하위 절대 경로 |
+
+> GitLab Omnibus는 PostgreSQL을 포함하는 stateful 서비스이므로 `latest` 또는 태그 없는 이미지를 사용하지 않는다.
+> GitLab image version은 명시적으로 고정한다.
 
 #### 주요 튜닝 값
 ```
@@ -209,6 +209,8 @@ docker compose -f infra/compose/docker-compose.gitlab.yml up -d
 #### 상태 확인
 ```
 docker ps
+docker compose -f infra/compose/docker-compose.gitlab.yml ps
+docker port gitlab
 ```
 
 #### 로그 확인
@@ -219,13 +221,3 @@ docker logs -f gitlab
 > GitLab 초기화는 시간이 오래 걸릴 수 있다.
 
 ---
-
----
-
-## 다음 단계
-
-GitHub Actions self-hosted runner 기반 자동 배포 구성은 아래 문서에서 진행한다.
-
-```text
-docs/github-actions-deploy.md
-```

@@ -190,7 +190,7 @@ environment:
 ### 적용
 
 ```
-MINI_PC_HOST=172.30.1.69 docker compose -f infra/compose/docker-compose.gitlab.yml up -d --force-recreate
+MINI_PC_HOST=172.30.1.67 docker compose -f infra/compose/docker-compose.gitlab.yml up -d --force-recreate
 ```
 
 ### 확인
@@ -227,7 +227,7 @@ docker exec -it gitlab gitlab-ctl status
 
 #### 확인 명령
 ```
-MINI_PC_HOST=172.30.1.69 docker compose -f infra/compose/docker-compose.gitlab.yml config
+MINI_PC_HOST=172.30.1.67 docker compose -f infra/compose/docker-compose.gitlab.yml config
 ```
 
 ---
@@ -257,7 +257,7 @@ docker inspect gitlab --format '{{json .Mounts}}' | python3 -m json.tool
 /home/gali/gitlab/data   → /var/opt/gitlab
 ```
 
-### 2. GitLab DB 기준 프로젝트 확인
+#### 2. GitLab DB 기준 프로젝트 확인
 ```
 docker exec -it gitlab gitlab-rails runner "puts \"projects=#{Project.count}\"; Project.order(:id).each { |p| puts \"#{p.id} #{p.full_path}\" }"
 ```
@@ -267,7 +267,7 @@ docker exec -it gitlab gitlab-rails runner "puts \"projects=#{Project.count}\"; 
 projects=0
 ```
 
-### 3. GitLab DB 기준 Runner 확인
+#### 3. GitLab DB 기준 Runner 확인
 ```
 docker exec -it gitlab gitlab-rails runner "puts \"runners=#{Ci::Runner.count}\"; Ci::Runner.order(:id).each { |r| puts \"#{r.id} #{r.description} active=#{r.active}\" }"
 ```
@@ -275,6 +275,22 @@ docker exec -it gitlab gitlab-rails runner "puts \"runners=#{Ci::Runner.count}\"
 #### 문제 발생 시 결과
 ```
 runners=0
+```
+
+#### 4. GitLab DB bootstrap 로그 확인
+
+```bash
+docker exec -it gitlab bash -lc '
+grep -RInE "db:schema:load|Creating the default ApplicationSetting record|Administrator account created" \
+/var/log/gitlab/gitlab-rails/gitlab-rails-db-migrate-*.log 2>/dev/null
+'
+```
+
+#### 문제 발생 시 확인된 로그
+```
+Running db:schema:load rake task
+Creating the default ApplicationSetting record.
+Administrator account created
 ```
 
 ### 판단
@@ -286,6 +302,9 @@ projects=0
 runners=0
 ```
 > 즉, UI 표시 문제가 아니라 현재 `/home/gali/gitlab/data` 기준 GitLab DB가 빈 상태로 초기화된 것으로 판단한다.
+
+> `gitlab-rails-db-migrate` 로그에서 `db:schema:load`, `Creating the default ApplicationSetting record`, `Administrator account created`가 확인되면 GitLab Rails DB가 새로 bootstrap된 상태로 본다.
+
 
 #### 가능한 원인
 - Phase 4 수행 당시와 현재 GitLab 데이터 경로가 달랐을 가능성
@@ -317,7 +336,7 @@ docker run -d \
   --restart unless-stopped \
   -v /home/gali/gitlab-runner/config:/etc/gitlab-runner \
   -v /var/run/docker.sock:/var/run/docker.sock \
-  gitlab/gitlab-runner:latest
+  gitlab/gitlab-runner:alpine-v18.11.2
 ```
 
 #### Runner 등록
@@ -533,3 +552,118 @@ RUNNER_COUNT >= 1
 - GitHub Actions 자동 검증: `gitlab-psql` 사용
 
 ---
+
+## Mini PC IP 변경으로 인한 GitLab URL 불일치
+
+### 증상
+
+Mini PC 내부 IP가 변경된 뒤 GitLab Web UI, Runner 생성 화면, clone URL 등에서 예전 IP가 계속 사용되었다.
+
+```text
+현재 IP: 172.30.1.67
+기존 IP: 172.30.1.69
+```
+
+Runner 생성 후에도 register 페이지가 예전 IP로 열렸다.
+
+```
+http://172.30.1.69:8080/admin/runners/2/register
+```
+
+Runner 로그에서는 `403 Forbidden`이 발생할 수 있다.
+
+```
+ERROR: Checking for jobs... forbidden
+status=POST http://172.30.1.67:8080/api/v4/jobs/request: 403 Forbidden
+```
+
+### 원인
+
+GitLab Container 실행 시 주입된 `GITLAB_OMNIBUS_CONFIG` 환경 변수에 기존 IP가 남아 있었다.
+
+#### 확인
+```
+docker inspect gitlab --format '{{range .Config.Env}}{{println .}}{{end}}' \
+  | grep -E "GITLAB_OMNIBUS_CONFIG|MINI_PC_HOST|external_url"
+```
+
+#### 문제 상태
+```
+external_url 'http://172.30.1.69:8080'
+```
+
+GitLab은 `external_url`을 기준으로 Web UI 링크, redirect URL, clone URL, Runner register URL을 생성한다.
+
+### 즉시 복구
+
+컨테이너 내부 `/etc/gitlab/gitlab.rb`에 현재 IP 기준 설정을 추가한다.
+
+```
+docker exec -it gitlab bash -lc "cat >> /etc/gitlab/gitlab.rb <<'EOF'
+
+# Manual override after Mini PC IP changed
+external_url 'http://172.30.1.67:8080'
+
+# Host 8080 -> Container 80
+nginx['listen_port'] = 80
+nginx['listen_https'] = false
+
+# GitLab SSH clone/push port
+gitlab_rails['gitlab_shell_ssh_port'] = 2222
+EOF"
+```
+
+#### 설정 반영
+```
+docker exec -it gitlab gitlab-ctl reconfigure
+docker exec -it gitlab gitlab-ctl restart
+```
+
+#### 확인
+```
+docker exec -it gitlab bash -lc "grep -n \"^external_url\" /etc/gitlab/gitlab.rb"
+curl -I http://172.30.1.67:8080
+```
+
+#### 정상 기준
+```
+external_url 'http://172.30.1.67:8080'
+```
+
+### 추가 조치
+
+IP 변경 후에는 다음 항목을 함께 수정한다.
+
+| 항목 | 수정 기준 |
+| --- | --- |
+| GitHub Actions Secret `MINI_PC_HOST` | 현재 Mini PC IP |
+| GitLab `external_url` | 현재 Mini PC IP |
+| GitLab Runner `config.toml` | 현재 GitLab URL |
+| Main PC hosts | `gitlab.local` → 현재 Mini PC IP |
+| Git remote URL | 현재 GitLab URL |
+| 문서 / README | 기존 IP 제거 |
+
+### Runner 주의사항
+
+GitLab DB가 초기화되었거나 Runner token이 맞지 않으면 URL만 수정해도 `403 Forbidden`이 발생한다.
+
+이 경우 기존 Runner를 제거하고 새 Runner token으로 재등록한다.
+
+자세한 절차는 아래 섹션을 따른다.
+
+```
+GitLab 재시작 후 프로젝트와 Runner 정보가 사라짐
+→ 현재 정상 mount 경로 기준으로 Phase 4 재수행
+```
+
+### 재발 방지
+
+Mini PC IP는 공유기 DHCP 예약 또는 Windows 고정 IP로 고정한다.
+
+```
+Mini PC IP 변경
+ → GitLab external_url 불일치
+ → Runner register URL 불일치
+ → Git remote URL 불일치
+ → Pipeline / Runner 검증 실패
+```

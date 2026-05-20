@@ -6,8 +6,11 @@ on:
       # main 브랜치에 push 또는 PR merge될 때 배포 실행
       - main
     paths:
-      # GitLab Docker Compose 파일이 변경된 경우에만 실행
+      # GitLab / Nginx Docker Compose 파일이 변경된 경우 배포 실행
       - "infra/compose/docker-compose.gitlab.yml"
+
+      # Nginx Reverse Proxy 설정 파일이 변경된 경우 배포 실행
+      - "nginx/**"
 
       # 배포 Workflow 자체가 변경된 경우에도 실행
       - ".github/workflows/deploy-gitlab.yml"
@@ -48,6 +51,44 @@ jobs:
             "auths": {}
           }
           EOF
+
+      # Nginx Reverse Proxy runtime 파일 준비
+      #
+      # GitHub Repository의 nginx/ 설정 파일은 원본이다.
+      # 실제 Nginx Container에는 Mini PC 고정 경로인 /home/gali/nginx 를 mount한다.
+      #
+      # GitHub Actions workspace 경로를 직접 mount하지 않는 이유:
+      #   GitHub Actions workspace는 checkout / cleanup / runner 작업 상태에 따라 달라질 수 있음
+      #   Nginx runtime 파일은 Mini PC WSL2 내부 고정 경로에 두는 것이 운영상 안정적임
+      #
+      # 생성 / 복사 대상:
+      #   /home/gali/nginx/nginx.conf
+      #   /home/gali/nginx/conf.d/gitlab.conf
+      #   /home/gali/nginx/ssl/gitlab.local.crt
+      #   /home/gali/nginx/ssl/gitlab.local.key
+      #
+      # 인증서 파일:
+      #   Git에 커밋하지 않음
+      #   없으면 self-hosted runner 실행 중 자체 서명 인증서로 생성
+      - name: Prepare Nginx runtime files
+        run: |
+          mkdir -p /home/gali/nginx/conf.d
+          mkdir -p /home/gali/nginx/ssl
+
+          cp nginx/nginx.conf /home/gali/nginx/nginx.conf
+          cp nginx/conf.d/gitlab.conf /home/gali/nginx/conf.d/gitlab.conf
+
+          if [ ! -f /home/gali/nginx/ssl/gitlab.local.crt ] || [ ! -f /home/gali/nginx/ssl/gitlab.local.key ]; then
+            openssl req -x509 -nodes -days 365 \
+              -newkey rsa:2048 \
+              -keyout /home/gali/nginx/ssl/gitlab.local.key \
+              -out /home/gali/nginx/ssl/gitlab.local.crt \
+              -subj "/CN=gitlab.local"
+          fi
+
+          ls -l /home/gali/nginx
+          ls -l /home/gali/nginx/conf.d
+          ls -l /home/gali/nginx/ssl
 
       # 8080 포트 사전 조건 확인
       #
@@ -92,17 +133,21 @@ jobs:
 
           echo "Port ${TARGET_PORT} is not reserved by Windows excluded port range."
 
-      # Mini PC WSL2 Ubuntu 내부에서 Docker Compose로 GitLab Container 실행
+      # Mini PC WSL2 Ubuntu 내부에서 Docker Compose로 GitLab / Nginx Container 실행
       #
-      # 기존 gitlab Container가 Created / Exited / 잘못된 port publish 상태로 남아 있을 수 있으므로
-      # 배포 전에 기존 gitlab Container를 먼저 제거한다.
+      # 기존 gitlab Container 또는 gitlab-nginx Container가 Created / Exited / 잘못된 port publish 상태로
+      # 남아 있을 수 있으므로 배포 전에 기존 Container를 먼저 제거한다.
       #
       # docker rm -f gitlab:
       #   기존 gitlab Container 제거
       #   /home/gali/gitlab 하위 bind mount 데이터는 삭제하지 않음
       #
+      # docker rm -f gitlab-nginx:
+      #   기존 Nginx Reverse Proxy Container 제거
+      #   /home/gali/nginx 하위 runtime 파일은 삭제하지 않음
+      #
       # docker compose up -d:
-      #   docker-compose.gitlab.yml 정의 기준으로 GitLab Container 재생성
+      #   docker-compose.gitlab.yml 정의 기준으로 GitLab Container와 Nginx Container 재생성
       #
       # --remove-orphans:
       #   현재 Compose 파일에 없는 orphan Container 정리
@@ -115,14 +160,19 @@ jobs:
       #
       # docker port gitlab:
       #   GitLab Container의 Host Port publish 상태 확인
-      - name: Deploy GitLab container
+      #
+      # docker port gitlab-nginx:
+      #   Nginx Container의 Host Port publish 상태 확인
+      - name: Deploy GitLab and Nginx containers
         env:
           MINI_PC_HOST: ${{ secrets.MINI_PC_HOST }}
         run: |
           docker rm -f gitlab || true
+          docker rm -f gitlab-nginx || true
           docker compose -f infra/compose/docker-compose.gitlab.yml up -d --remove-orphans
           docker ps
           docker port gitlab
+          docker port gitlab-nginx
 
       # GitLab Web UI 접근용 Host 8080 → Container 80 포트 publish 확인
       #
@@ -142,6 +192,49 @@ jobs:
           fi
 
           curl -I --max-time 10 http://127.0.0.1:8080 || true
+
+      # Nginx Reverse Proxy 접근용 Host 80 / 443 포트 publish 확인
+      #
+      # 정상 기준:
+      #   docker port gitlab-nginx 80
+      #   0.0.0.0:80
+      #
+      #   docker port gitlab-nginx 443
+      #   0.0.0.0:443
+      - name: Verify Nginx published ports
+        run: |
+          docker port gitlab-nginx
+
+          if ! docker port gitlab-nginx 80 | grep -q ":80"; then
+            echo "Nginx HTTP port 80 is not published"
+            exit 1
+          fi
+
+          if ! docker port gitlab-nginx 443 | grep -q ":443"; then
+            echo "Nginx HTTPS port 443 is not published"
+            exit 1
+          fi
+
+      # Nginx Reverse Proxy 설정 문법 확인
+      #
+      # 정상 기준:
+      #   nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+      #   nginx: configuration file /etc/nginx/nginx.conf test is successful
+      - name: Verify Nginx config
+        run: |
+          docker exec gitlab-nginx nginx -t
+
+      # Nginx HTTP → HTTPS redirect 확인
+      #
+      # 정상 기준:
+      #   HTTP/1.1 301 Moved Permanently
+      #   또는 HTTP/1.1 308 Permanent Redirect
+      #
+      # 이 검증은 localhost 기준으로 Nginx Container의 80번 포트 publish 상태와
+      # gitlab.conf의 redirect 설정을 확인한다.
+      - name: Verify Nginx HTTPS redirect
+        run: |
+          curl -I --max-time 10 http://127.0.0.1 | grep -E "301|308"
 
       # GitLab Container 재배포 후 runtime volume이 기존 고정 경로를 유지하는지 확인
       #

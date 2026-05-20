@@ -81,5 +81,8 @@ gitlab/tmp/*
 # Nginx SSL
 # =========================
 nginx/ssl/
+nginx/ssl/*.key
+nginx/ssl/*.crt
+nginx/ssl/*.pem
 
 gitlab-workspace/

@@ -1,42 +1,35 @@
 # Self-Hosted DevOps Platform
 
-> Windows 11 기반 Mini PC 환경에서 WSL2와 Docker Desktop을 활용하여 GitLab 기반 Self-Hosted DevOps 플랫폼을 구축하고 운영하는 프로젝트
+> Windows 11 기반 Mini PC 환경에서 WSL2와 Docker Desktop을 활용하여 GitLab 기반 Self-Hosted DevOps 인프라를 단계적으로 구축하고, CI/CD 실행 흐름과 운영 안정성을 검증하는 프로젝트
 
-- GitLab + Runner 기반 CI/CD 환경 구성
-- Docker 기반 서비스 배포 자동화
-- Reverse Proxy 및 HTTPS 구성
-- Prometheus/Grafana 기반 모니터링 구축
-- 제한된 리소스 환경에서 GitLab 성능 최적화
+- GitHub Actions self-hosted runner 기반 GitLab 초기 배포 자동화
+- GitLab + Runner 기반 CI/CD 실행 환경 구성
+- Docker Executor 기반 Pipeline 실행 구조 구성
+- Docker Compose 기반 배포 검증 흐름 구성
+- Reverse Proxy 및 HTTPS 접근 구조 구성
+- Prometheus/Grafana 기반 모니터링 구성
+- 제한된 리소스 환경에서 GitLab 운영 가능성 평가
 - Self-hosted GitOps 운영 경험 확보
 
 ---
 
 ## 핵심 목표
 
-### 1. Self-Hosted DevOps 플랫폼 구축
+### 1. Self-Hosted DevOps 인프라 구축
 
-외부 SaaS 의존 없이 GitLab 기반 자체 DevOps 플랫폼 구축
+Windows 11 기반 Mini PC에서 WSL2, Docker Desktop, GitLab, GitLab Runner를 활용해 자체 DevOps 실행 환경을 구성한다.
 
-### 2. GitOps 기반 운영 흐름 학습
+### 2. CI/CD 실행 흐름 구성
 
-Git Push를 기준으로 자동 빌드·배포가 수행되는 GitOps 흐름 구성
+GitHub Actions self-hosted runner로 GitLab 서버를 초기 배포하고, GitLab 구축 이후에는 GitLab Runner 기반 Pipeline 실행 구조로 전환한다.
 
-### 3. 제한된 리소스 환경 운영 경험 확보
+### 3. 제한된 리소스 환경 검증
 
-Intel N100 기반 저전력 Mini PC 환경에서 성능 최적화 및 안정성 확보
+Intel N100 기반 Mini PC에서 GitLab Omnibus, GitLab Runner, Docker Executor를 실행하고 리소스 제약 안에서 운영 가능성을 확인한다.
 
-### 4. 실제 운영 중심 경험 확보
+### 4. 운영 확장 기반 확보
 
-단순 설치가 아닌:
-
-- 장애 대응
-- 성능 튜닝
-- 백업
-- 모니터링
-- 로그 분석
-- 배포 자동화
-
-까지 포함한 운영 경험 확보
+Reverse Proxy, HTTPS, Monitoring, Backup, 장애 대응으로 확장 가능한 Self-Hosted DevOps 운영 기반을 만든다.
 
 ---
 
@@ -99,17 +92,22 @@ Intel N100 기반 저전력 Mini PC 환경에서 성능 최적화 및 안정성 
  │       └─ /home/gali/gitlab/logs
  │
  ├─ GitLab Omnibus Container
- ├─ Container Registry
- ├─ Nginx
+ ├─ GitLab Runner Container
+ ├─ Docker Executor
+ └─ GitLab 운영 안정성 검증
+     ├─ DB bootstrap 여부 확인
+     ├─ Project / Runner 데이터 유지 확인
+     ├─ 재기동 검증
+     └─ 백업/복구 가능성 확인
+
+          안정성 검증 통과 후 확장
+               ↓
+
+[ Extended DevOps Platform ]
+ ├─ Reverse Proxy / SSL
  ├─ Prometheus
  ├─ Grafana
  └─ Deployment Target
-
-                이후 전환
-                     ↓
-
-[ GitLab ]
- └─ GitLab Runner 기반 CI/CD
 ```
 
 ### 배포 흐름
@@ -141,6 +139,8 @@ self-hosted-devops-platform
 │  ├─ monitoring.md
 │  ├─ backup-strategy.md
 │  ├─ troubleshooting.md
+│  ├─ reverse-proxy-ssl.md
+│  ├─ operations-stability.md
 │  └─ optimization.md
 │
 ├─ infra/
@@ -200,7 +200,6 @@ self-hosted-devops-platform
 | `/home/<USER>/gitlab/data`   | Repository, DB, 업로드 파일 등 실제 데이터 |
 | `/home/<USER>/gitlab/logs`   | GitLab 로그                       |
 
-
 ---
 
 ## 변경 관리 프로세스 (Git Workflow)
@@ -243,17 +242,19 @@ feature/xxx
 
 ## 문서
 
-| 문서 | 내용 |
-|---|---|
-| [architecture.md](docs/architecture.md) | Main PC, GitHub Actions, Mini PC self-hosted runner, GitLab Container로 구성된 전체 아키텍처 설명 |
-| [installation.md](docs/installation.md) | Windows 11, WSL2, Docker Desktop 기반 GitLab 실행 환경 준비 절차 |
-| [github-actions-deploy.md](docs/github-actions-deploy.md) | GitHub self-hosted runner를 통한 Mini PC 내부 Docker Compose 배포 자동화 구성 |
-| [gitlab-runner.md](docs/gitlab-runner.md) | Docker Executor 기반 GitLab Runner 등록, 테스트 Pipeline 실행, Runner 운영 기준 |
-| [gitlab-ci-pipeline.md](docs/gitlab-ci-pipeline.md) | GitLab Runner 기반 Build/Test/Docker Build/Deploy Pipeline 구성 |
-| [monitoring.md](docs/monitoring.md) | Prometheus/Grafana 기반 모니터링 구성 |
-| [backup-strategy.md](docs/backup-strategy.md) | GitLab 데이터 백업 및 복구 전략 |
-| [troubleshooting.md](docs/troubleshooting.md) | 구축 및 운영 중 발생한 문제와 해결 기록 |
-| [optimization.md](docs/optimization.md) | GitLab 및 Docker Desktop 성능 튜닝 기록 |
+| Phase | 문서 | 내용 |
+|---|---|---|
+| - | [architecture.md](docs/architecture.md) | Main PC, GitHub Actions, Mini PC self-hosted runner, GitLab Container로 구성된 전체 아키텍처 설명 |
+| Phase 1~3 | [installation.md](docs/installation.md) | Windows 11, WSL2, Docker Desktop 기반 GitLab 실행 환경 준비 절차 |
+| Phase 2 | [github-actions-deploy.md](docs/github-actions-deploy.md) | GitHub self-hosted runner를 통한 Mini PC 내부 Docker Compose 배포 자동화 구성 |
+| Phase 4 | [gitlab-runner.md](docs/gitlab-runner.md) | Docker Executor 기반 GitLab Runner 등록, 테스트 Pipeline 실행, Runner 운영 기준 |
+| Phase 5 | [gitlab-ci-pipeline.md](docs/gitlab-ci-pipeline.md) | GitLab Repository 기준 validate-compose / deploy-readiness-check Pipeline 검증 |
+| Phase 6 | [operations-stability.md](docs/operations-stability.md) | 장기 종료 후 재기동, GitLab DB 유지, Project / Runner 상태 검증 |
+| Phase 7 | [reverse-proxy-ssl.md](docs/reverse-proxy-ssl.md) | Nginx Reverse Proxy 및 HTTPS 접근 구성 |
+| Phase 8 | [monitoring.md](docs/monitoring.md) | Prometheus/Grafana 기반 모니터링 구성 |
+| Phase 9 | [backup-strategy.md](docs/backup-strategy.md) | GitLab 데이터 백업 및 복구 전략 |
+| 공통 | [troubleshooting.md](docs/troubleshooting.md) | 구축 및 운영 중 발생한 문제와 해결 기록 |
+| 공통 | [optimization.md](docs/optimization.md) | GitLab 및 Docker Desktop 성능 튜닝 기록 |
 
 ---
 
@@ -396,21 +397,57 @@ GitLab Repository
 
 ---
 
-### Phase 6. Reverse Proxy 및 SSL 구성
+### Phase 6. GitLab 운영 안정성 검증
+
+#### 작업 내용
+
+- 장기 종료 후 GitLab 재기동 검증
+- GitLab 프로젝트 유지 여부 확인
+- GitLab Runner 등록 정보 유지 여부 확인
+- root 계정 상태 유지 여부 확인
+- `application_settings`, `users`, `projects`, `ci_runners` 상태 확인
+- `gitlab-rails-db-migrate` 로그 확인
+- `db:schema:load` 재발 여부 확인
+- GitLab Backup 생성 가능 여부 확인
+- GitLab Omnibus 장기 운영 가능 여부 판단
+
+#### 검증 결과
+- 기존 GitLab 프로젝트가 유지되지 않음
+- GitLab Runner 등록 정보가 유지되지 않음
+- root 계정이 재생성됨
+- `application_settings`가 재생성됨
+- `gitlab-rails-db-migrate` 로그에서 `db:schema:load` 실행 확인
+
+---
+
+### Phase 7. Reverse Proxy 및 SSL 구성
 
 #### 작업 내용
 - Nginx Reverse Proxy 구성
 - GitLab 접근 도메인 또는 로컬 DNS 구성
 - HTTPS 적용
 - 인증서 갱신 방식 정리
+- `nginx/ssl/` 디렉토리에 자체 서명 인증서 생성
+- Docker Compose로 Nginx Container 실행
+- Nginx 설정 문법 확인
+- GitLab Container와 Reverse Proxy 연결 확인
+
+#### 검증 내용
+- Main PC Windows hosts 파일에 `gitlab.local` 등록
+- `ping gitlab.local` 확인
+- `curl -I http://gitlab.local` 확인
+- `curl -k -I https://gitlab.local` 확인
+- 브라우저에서 `https://gitlab.local` 접속 확인
 
 #### 구현 목표
-- HTTPS 기반 접근 구성
-- Reverse Proxy 기반 서비스 운영
+- Git 기반 변경 이력 확보
+- Nginx Reverse Proxy 기반 GitLab 접근 구조 구성
+- HTTPS 기반 GitLab Web UI 접근 확인
+- 기존 `http://172.30.1.67:8080` 접근 경로는 복구 경로로 유지
 
 ---
 
-### Phase 7. Monitoring 구성
+### Phase 8. Monitoring 구성
 
 #### 작업 내용
 - Prometheus 구성
@@ -434,7 +471,7 @@ GitLab Repository
 
 ---
 
-### Phase 8. 운영 문서화
+### Phase 9. 운영 문서화
 
 #### 작업 내용
 - 설치 절차 문서화

@@ -314,6 +314,11 @@ Username: root
 Password: initial_root_password 파일 내용
 ```
 
-> 주의: initial_root_password 파일은 일정 시간이 지나면 삭제될 수 있으므로 초기 실행 후 바로 확인한다.
+> initial_root_password 파일은 초기 실행 후 일정 시간이 지나면 삭제될 수 있다.
+> 파일이 없거나 비밀번호를 재설정해야 하는 경우 다음 명령을 사용한다.
+
+```
+docker exec -it gitlab gitlab-rake "gitlab:password:reset[root]"
+```
 
 ---

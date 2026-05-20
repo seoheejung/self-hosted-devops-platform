@@ -132,7 +132,7 @@ Phase 4에서는 GitLab Runner 동작 검증이 목적이므로, 별도 테스�
 | Runner config 경로 | `/home/<USER>/gitlab-runner/config` |
 | Runner 이름 | `mini-pc-docker-runner` |
 | Tags | `docker`, `mini-pc`, `wsl2` |
-| 기본 이미지 | `alpine:latest` |
+| 기본 이미지 | `alpine:3.20` |
 
 ---
 
@@ -163,13 +163,14 @@ Phase 4에서는 GitLab Runner 동작 검증이 목적이므로, 별도 테스�
 
 ## Container 실행 기준
 
-GitLab Runner는 `gitlab/gitlab-runner` 이미지를 사용한다.
+GitLab Runner는 GitLab 서버 버전과 맞춘 고정 버전 이미지를 사용한다.
 
 ```
 Container name: gitlab-runner
 Restart policy: unless-stopped
 Config volume: /home/<USER>/gitlab-runner/config:/etc/gitlab-runner
 Docker socket: /var/run/docker.sock:/var/run/docker.sock
+Runner image: gitlab/gitlab-runner:alpine-v18.11.2
 ```
 
 ---
@@ -182,7 +183,7 @@ Docker socket: /var/run/docker.sock:/var/run/docker.sock
 | Description | `mini-pc-docker-runner` |
 | Tags | `docker`, `mini-pc`, `wsl2` |
 | Executor | `docker` |
-| Default image | `alpine:latest` |
+| Default image | `alpine:3.20` |
 
 > Runner 생성은 GitLab Web UI에서 수행하고, Runner 등록은 Mini PC WSL2 Ubuntu의 `gitlab-runner` Container에서 수행한다.
 
@@ -236,7 +237,7 @@ Mini PC GitLab 테스트 Repository
 
 테스트 Job 기준:
 
-- `alpine:latest` 이미지 사용
+- `alpine:3.20` 이미지 사용
 - Runner tag 지정
 - 간단한 echo / uname 명령 실행
 - Pipeline `Passed` 확인
