@@ -1,6 +1,6 @@
-# Self-Hosted DevOps Platform
+# Mini PC 기반 온프레미스 Self-Hosted DevOps Platform
 
-> Windows 11 기반 Mini PC 환경에서 WSL2와 Docker Desktop을 활용하여 GitLab 기반 Self-Hosted DevOps 인프라를 단계적으로 구축하고, CI/CD 실행 흐름과 운영 안정성을 검증하는 프로젝트
+> Windows 11 기반 Mini PC 환경에서 WSL2와 Docker Desktop을 활용하여 GitLab 기반 온프레미스 Self-Hosted DevOps 인프라를 단계적으로 구축하고, CI/CD 실행 흐름과 운영 안정성을 검증하는 프로젝트
 
 - GitHub Actions self-hosted runner 기반 GitLab 초기 배포 자동화
 - GitLab + Runner 기반 CI/CD 실행 환경 구성
@@ -9,15 +9,15 @@
 - Nginx Reverse Proxy 및 내부망 HTTPS 접근 구조 구성
 - Prometheus/Grafana 기반 기본 Monitoring Stack 구성
 - 제한된 리소스 환경에서 GitLab 운영 가능성 평가
-- Self-hosted GitOps 운영 경험 확보
+- 온프레미스 Self-Hosted DevOps 운영 경험 확보
 
 ---
 
 ## 핵심 목표
 
-### 1. Self-Hosted DevOps 인프라 구축
+### 1. 온프레미스 Self-Hosted DevOps 인프라 구축
 
-Windows 11 기반 Mini PC에서 WSL2, Docker Desktop, GitLab, GitLab Runner를 활용해 자체 DevOps 실행 환경을 구성한다.
+Windows 11 기반 Mini PC에서 WSL2, Docker Desktop, GitLab, GitLab Runner를 활용해 온프레미스 DevOps 실행 환경을 구성한다.
 
 ### 2. CI/CD 실행 흐름 구성
 
@@ -29,7 +29,7 @@ Intel N100 기반 Mini PC에서 GitLab Omnibus, GitLab Runner, Docker Executor�
 
 ### 4. 운영 확장 기반 확보
 
-Reverse Proxy, HTTPS, Monitoring, Backup, 장애 대응으로 확장 가능한 Self-Hosted DevOps 운영 기반을 만든다.
+Reverse Proxy, HTTPS, Monitoring, Backup, 장애 대응을 통해 Mini PC 기반 온프레미스 Self-Hosted DevOps 운영 구조의 확장 가능성과 한계를 검증한다.
 
 ---
 
