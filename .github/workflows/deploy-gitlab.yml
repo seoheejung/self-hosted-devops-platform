@@ -325,7 +325,7 @@ jobs:
 
       # Prometheus HTTP readiness 확인
       #
-      # localhost 기준으로 self-hosted runner에서 Prometheus Container publish port에 접근한다.
+      # Prometheus Container가 Up 상태가 되어도 readiness endpoint 응답까지 약간의 시간이 걸릴 수 있다.
       #
       # 정상 기준:
       #   HTTP 200 응답
@@ -336,22 +336,50 @@ jobs:
       #   gitlab-prometheus Container 로그
       - name: Verify Prometheus HTTP endpoint
         run: |
-          curl -f -I --max-time 10 http://127.0.0.1:9090/-/ready
+          for i in {1..30}; do
+            if curl -f --max-time 10 http://127.0.0.1:9090/-/ready; then
+              echo "Prometheus readiness check passed"
+              exit 0
+            fi
+
+            echo "Waiting for Prometheus readiness... ($i/30)"
+            docker logs --tail=30 gitlab-prometheus || true
+            sleep 5
+          done
+
+          echo "Prometheus readiness check failed"
+          docker logs --tail=100 gitlab-prometheus || true
+          exit 1
 
       # Grafana HTTP health 확인
       #
-      # localhost 기준으로 self-hosted runner에서 Grafana Container publish port에 접근한다.
+      # Grafana Container가 Up 상태가 되어도 내부 서버가 바로 요청을 받을 준비가 된 것은 아니다.
+      # Container 생성 직후에는 /api/health 요청에서 connection reset이 발생할 수 있으므로 재시도한다.
       #
       # 정상 기준:
       #   HTTP 200 응답
       #
       # 실패 시 확인 대상:
+      #   Grafana startup 로그
       #   Grafana provisioning mount 경로
       #   grafana-data volume 상태
       #   gitlab-grafana Container 로그
       - name: Verify Grafana HTTP endpoint
         run: |
-          curl -f -I --max-time 10 http://127.0.0.1:3000/api/health
+          for i in {1..30}; do
+            if curl -f --max-time 10 http://127.0.0.1:3000/api/health; then
+              echo "Grafana health check passed"
+              exit 0
+            fi
+
+            echo "Waiting for Grafana HTTP endpoint... ($i/30)"
+            docker logs --tail=30 gitlab-grafana || true
+            sleep 5
+          done
+
+          echo "Grafana health check failed"
+          docker logs --tail=100 gitlab-grafana || true
+          exit 1
 
       # GitLab Web UI 접근용 Host 8080 → Container 80 포트 publish 확인
       #
