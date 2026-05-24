@@ -7,7 +7,7 @@
 - Docker Executor 기반 Pipeline 실행 구조 구성
 - Docker Compose 기반 배포 검증 흐름 구성
 - Nginx Reverse Proxy 및 내부망 HTTPS 접근 구조 구성
-- Prometheus/Grafana 기반 모니터링 구성
+- Prometheus/Grafana 기반 기본 Monitoring Stack 구성
 - 제한된 리소스 환경에서 GitLab 운영 가능성 평가
 - Self-hosted GitOps 운영 경험 확보
 
@@ -102,7 +102,7 @@ Reverse Proxy, HTTPS, Monitoring, Backup, 장애 대응으로 확장 가능한 S
  └─ GitLab 운영 안정성 검증
 
 [ Extended DevOps Platform ]
- ├─ Prometheus / Grafana Monitoring
+ ├─ Prometheus / Grafana Monitoring Stack
  ├─ Backup / Restore
  └─ Deployment Target
 ```
@@ -113,14 +113,14 @@ Main PC
  → GitHub Repository
  → GitHub Actions
  → Mini PC self-hosted runner
- → Nginx runtime 파일 준비
+ → runtime 파일 준비
  → Docker Compose
- → GitLab / Nginx Container
+ → GitLab / Nginx / Prometheus / Grafana Container
 ```
 - GitHub-hosted runner는 내부망 사설 IP의 Mini PC에 직접 접근할 수 없으므로 사용하지 않는다.
 - Mini PC WSL2 Ubuntu에 GitHub self-hosted runner를 등록하고, 해당 runner가 GitHub Actions job을 받아 Docker Compose를 실행한다.
-- GitHub Actions는 Repository의 Nginx 설정 파일을 Mini PC runtime 경로 `/home/gali/nginx`로 복사한 뒤 Docker Compose를 실행한다.
-- GitLab runtime data는 `/home/gali/gitlab`, Nginx runtime files는 `/home/gali/nginx` 아래에 유지한다.
+- GitHub Actions는 Repository의 Nginx 설정 파일을 `/home/gali/nginx`, Monitoring 설정 파일을 `/home/gali/monitoring` runtime 경로로 복사한 뒤 Docker Compose를 실행한다.
+- GitLab runtime data는 `/home/gali/gitlab`, Nginx runtime files는 `/home/gali/nginx`, Monitoring runtime files는 `/home/gali/monitoring` 아래에 유지한다.
 
 ---
 
@@ -219,6 +219,21 @@ self-hosted-devops-platform
 
 `nginx/ssl/*.crt`, `nginx/ssl/*.key`, `nginx/ssl/*.pem` 파일은 Git에 commit하지 않는다.
 
+### Monitoring runtime 파일 경로
+
+- Repository 안의 `infra/monitoring/` 디렉토리는 Monitoring 설정 원본이다.
+- 실제 Prometheus / Grafana Container에는 Mini PC WSL2 내부 고정 runtime 경로를 mount한다.
+
+| 경로 | 역할 |
+| --- | --- |
+| `infra/monitoring/prometheus/prometheus.yml` | GitHub Repository의 Prometheus 설정 원본 |
+| `infra/monitoring/grafana/provisioning/datasources/datasource.yml` | Grafana Prometheus datasource 설정 원본 |
+| `infra/monitoring/grafana/provisioning/dashboards/dashboards.yml` | Grafana dashboard provider 설정 원본 |
+| `infra/monitoring/grafana/dashboards/mini-pc-devops-overview.json` | Grafana Dashboard JSON 원본 |
+| `/home/gali/monitoring/prometheus/prometheus.yml` | Prometheus Container mount 대상 |
+| `/home/gali/monitoring/grafana/provisioning/` | Grafana provisioning mount 대상 |
+| `/home/gali/monitoring/grafana/dashboards/` | Grafana dashboard JSON mount 대상 |
+
 ---
 
 ## 변경 관리 프로세스 (Git Workflow)
@@ -270,7 +285,7 @@ feature/xxx
 | Phase 5 | [gitlab-ci-pipeline.md](docs/gitlab-ci-pipeline.md) | GitLab Repository 기준 validate-compose / deploy-readiness-check Pipeline 검증 |
 | Phase 6 | [operations-stability.md](docs/operations-stability.md) | 장기 종료 후 재기동, GitLab DB 유지, Project / Runner 상태 검증 |
 | Phase 7 | [reverse-proxy-ssl.md](docs/reverse-proxy-ssl.md) | Nginx Reverse Proxy 및 HTTPS 접근 구성 |
-| Phase 8 | [monitoring.md](docs/monitoring.md) | Prometheus/Grafana 기반 모니터링 구성 |
+| Phase 8 | [monitoring.md](docs/monitoring.md) | Prometheus/Grafana 기반 기본 Monitoring Stack 구성 |
 | Phase 9 | [backup-strategy.md](docs/backup-strategy.md) | GitLab 데이터 백업 및 복구 전략 |
 | 공통 | [troubleshooting.md](docs/troubleshooting.md) | 구축 및 운영 중 발생한 문제와 해결 기록 |
 | 공통 | [optimization.md](docs/optimization.md) | GitLab 및 Docker Desktop 성능 튜닝 기록 |
@@ -477,26 +492,33 @@ GitLab Repository
 ### Phase 8. Monitoring 구성
 
 #### 작업 내용
-- Prometheus Metrics 수집 구성
-- Grafana Dashboard 구성
-- Resource Monitoring 구성
-- GitLab 상태 시각화
-- 장애 탐지 및 로그 분석 기준 정리
-- Alert 구성 필요 여부 검토
+- Prometheus Container 구성
+- Grafana Container 구성
+- Prometheus 설정 파일 작성
+- Grafana datasource provisioning 구성
+- Grafana dashboard provisioning 구성
+- GitHub Actions 배포 Workflow에 Monitoring Stack 반영
+- Monitoring runtime 경로 `/home/gali/monitoring` 구성
+- Prometheus 자체 상태 수집 구성
+- Prometheus 상태 Dashboard 작성
+- Dashboard JSON export 및 Repository 반영
 
 #### 수집 대상
-- Windows Host 리소스
-- WSL2 Ubuntu 리소스
-- Docker Container 리소스
-- GitLab 상태
-- GitLab Runner 상태
-- Nginx 상태
+- Prometheus 자체 상태
+
+#### Dashboard 구성 대상
+- Prometheus target 상태
+- Prometheus scrape 상태
+- Prometheus process CPU 사용량
+- Prometheus process Memory 사용량
+- 추가 Metrics 수집 대상 정리
 
 #### 구현 목표
-- Mini PC 운영 상태를 Grafana에서 확인
-- GitLab / Runner / Nginx 상태를 시각화
-- 장애 발생 시 확인할 Metrics와 Log 기준 정리
-- Alert 적용 여부 판단
+- Prometheus / Grafana 기본 Monitoring Stack 구성
+- GitHub Actions 기반 Monitoring Stack 배포 흐름 확보
+- Grafana에서 Prometheus datasource 자동 연결 확인
+- Grafana dashboard provisioning 확인
+- Prometheus 자체 상태 Dashboard 구성
 
 ---
 

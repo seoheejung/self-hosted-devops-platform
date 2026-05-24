@@ -255,11 +255,11 @@ jobs:
       # 기존 Monitoring Container가 Created / Exited / 잘못된 port publish 상태로
       # 남아 있을 수 있으므로 배포 전에 기존 Container를 제거한다.
       #
-      # docker rm -f gitlab-prometheus:
+      # docker rm -f monitoring-prometheus:
       #   기존 Prometheus Container 제거
       #   prometheus-data named volume은 삭제하지 않음
       #
-      # docker rm -f gitlab-grafana:
+      # docker rm -f monitoring-grafana:
       #   기존 Grafana Container 제거
       #   grafana-data named volume은 삭제하지 않음
       #
@@ -275,33 +275,33 @@ jobs:
       # docker ps:
       #   컨테이너 실행 상태 확인
       #
-      # docker port gitlab-prometheus:
+      # docker port monitoring-prometheus:
       #   Prometheus 9090 포트 publish 상태 확인
       #
-      # docker port gitlab-grafana:
+      # docker port monitoring-grafana:
       #   Grafana 3000 포트 publish 상태 확인
       - name: Deploy Monitoring containers
         run: |
-          docker rm -f gitlab-prometheus || true
-          docker rm -f gitlab-grafana || true
+          docker rm -f monitoring-prometheus || true
+          docker rm -f monitoring-grafana || true
           docker compose -p monitoring -f infra/compose/docker-compose.monitoring.yml up -d --remove-orphans
           docker ps
-          docker port gitlab-prometheus
-          docker port gitlab-grafana
+          docker port monitoring-prometheus
+          docker port monitoring-grafana
 
       # Prometheus 접근용 Host 9090 → Container 9090 포트 publish 확인
       #
       # 정상 기준:
-      #   docker port gitlab-prometheus 9090
+      #   docker port monitoring-prometheus 9090
       #   0.0.0.0:9090
       #
       # Main PC 접근 주소:
       #   http://172.30.1.67:9090
       - name: Verify Prometheus published port
         run: |
-          docker port gitlab-prometheus
+          docker port monitoring-prometheus
 
-          if ! docker port gitlab-prometheus 9090 | grep -q ":9090"; then
+          if ! docker port monitoring-prometheus 9090 | grep -q ":9090"; then
             echo "Prometheus port 9090 is not published"
             exit 1
           fi
@@ -309,16 +309,16 @@ jobs:
       # Grafana 접근용 Host 3000 → Container 3000 포트 publish 확인
       #
       # 정상 기준:
-      #   docker port gitlab-grafana 3000
+      #   docker port monitoring-grafana 3000
       #   0.0.0.0:3000
       #
       # Main PC 접근 주소:
       #   http://172.30.1.67:3000
       - name: Verify Grafana published port
         run: |
-          docker port gitlab-grafana
+          docker port monitoring-grafana
 
-          if ! docker port gitlab-grafana 3000 | grep -q ":3000"; then
+          if ! docker port monitoring-grafana 3000 | grep -q ":3000"; then
             echo "Grafana port 3000 is not published"
             exit 1
           fi
@@ -333,7 +333,7 @@ jobs:
       # 실패 시 확인 대상:
       #   prometheus.yml 문법
       #   /home/gali/monitoring/prometheus/prometheus.yml mount 여부
-      #   gitlab-prometheus Container 로그
+      #   monitoring-prometheus Container 로그
       - name: Verify Prometheus HTTP endpoint
         run: |
           for i in {1..30}; do
@@ -343,12 +343,12 @@ jobs:
             fi
 
             echo "Waiting for Prometheus readiness... ($i/30)"
-            docker logs --tail=30 gitlab-prometheus || true
+            docker logs --tail=30 monitoring-prometheus || true
             sleep 5
           done
 
           echo "Prometheus readiness check failed"
-          docker logs --tail=100 gitlab-prometheus || true
+          docker logs --tail=100 monitoring-prometheus || true
           exit 1
 
       # Grafana HTTP health 확인
@@ -363,7 +363,7 @@ jobs:
       #   Grafana startup 로그
       #   Grafana provisioning mount 경로
       #   grafana-data volume 상태
-      #   gitlab-grafana Container 로그
+      #   monitoring-grafana Container 로그
       - name: Verify Grafana HTTP endpoint
         run: |
           for i in {1..30}; do
@@ -373,12 +373,12 @@ jobs:
             fi
 
             echo "Waiting for Grafana HTTP endpoint... ($i/30)"
-            docker logs --tail=30 gitlab-grafana || true
+            docker logs --tail=30 monitoring-grafana || true
             sleep 5
           done
 
           echo "Grafana health check failed"
-          docker logs --tail=100 gitlab-grafana || true
+          docker logs --tail=100 monitoring-grafana || true
           exit 1
 
       # GitLab Web UI 접근용 Host 8080 → Container 80 포트 publish 확인

@@ -1,11 +1,11 @@
 services:
   prometheus:
     # Prometheus Metrics 수집 서버
-    # GitLab 운영 환경의 리소스 상태와 서비스 상태를 수집하는 기준 서버
+    # Prometheus 자체 상태를 수집 대상으로 구성
     image: prom/prometheus:latest
 
     # 컨테이너 이름 고정
-    container_name: gitlab-prometheus
+    container_name: monitoring-prometheus
 
     # Host Port : Container Port
     ports:
@@ -17,11 +17,12 @@ services:
       # GitHub Repository의 infra/monitoring/prometheus/prometheus.yml 파일은
       # GitHub Actions에서 Mini PC runtime 경로인 /home/gali/monitoring/prometheus/prometheus.yml 로 복사
       #
-      # Prometheus Container는 GitHub Actions workspace를 직접 참조하지 않고, Mini PC WSL2 내부 고정 runtime 경로 mount
+      # Prometheus Container는 GitHub Actions workspace를 직접 참조하지 않고,
+      # Mini PC WSL2 내부 고정 runtime 경로를 mount
       - /home/gali/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
 
       # Prometheus TSDB 데이터 저장 volume
-      # 컨테이너 재생성 후에도 수집 데이터가 유지되도록 named volume 사용
+      # Container 재생성 후에도 수집 데이터가 유지되도록 named volume 사용
       - prometheus-data:/prometheus
 
     command:
@@ -36,11 +37,11 @@ services:
 
   grafana:
     # Grafana Dashboard 서버
-    # Prometheus datasource를 연결하고, Mini PC / GitLab 운영 상태를 시각화
+    # Prometheus datasource를 연결하고, Prometheus 자체 Metrics를 시각화
     image: grafana/grafana:latest
 
     # 컨테이너 이름 고정
-    container_name: gitlab-grafana
+    container_name: monitoring-grafana
 
     # Host Port : Container Port
     ports:
@@ -52,12 +53,15 @@ services:
       - grafana-data:/var/lib/grafana
 
       # Grafana provisioning 설정 mount
+      #
       # datasource / dashboard provider 설정을 파일 기반으로 관리
       # GitHub Actions가 Repository 설정 파일을 /home/gali/monitoring/grafana/provisioning 으로 복사
       - /home/gali/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
 
       # Grafana dashboard JSON mount
-      # Grafana UI에서 작성한 Dashboard를 JSON으로 export한 뒤 Repository에 저장하고, GitHub Actions가 runtime 경로로 복사
+      #
+      # Grafana UI에서 작성한 Dashboard를 JSON으로 export한 뒤 Repository에 저장하고,
+      # GitHub Actions가 runtime 경로로 복사
       - /home/gali/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
 
     # Prometheus Container 생성 이후 Grafana Container 생성
