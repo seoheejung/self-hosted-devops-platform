@@ -129,7 +129,6 @@ Main PC
 self-hosted-devops-platform
 │
 ├─ docs/
-│  ├─ screenshots/
 │  ├─ architecture.md
 │  ├─ installation.md
 │  ├─ github-actions-deploy.md
@@ -139,8 +138,7 @@ self-hosted-devops-platform
 │  ├─ backup-strategy.md
 │  ├─ troubleshooting.md
 │  ├─ reverse-proxy-ssl.md
-│  ├─ operations-stability.md
-│  └─ optimization.md
+│  └─ operations-stability.md
 │
 ├─ infra/
 │  ├─ docker/
@@ -152,24 +150,19 @@ self-hosted-devops-platform
 │  │  ├─ docker-compose.monitoring.yml
 │  │  └─ docker-compose.full.yml
 │  │
-│  ├─ monitoring/
-│  │  ├─ prometheus/
-│  │  │  └─ prometheus.yml
-│  │  │
-│  │  └─ grafana/
-│  │     ├─ provisioning/
-│  │     │  ├─ datasources/
-│  │     │  │  └─ datasource.yml
-│  │     │  └─ dashboards/
-│  │     │     └─ dashboards.yml
-│  │     │
-│  │     └─ dashboards/
-│  │        └─ mini-pc-devops-overview.json
-│  │
-│  └─ scripts/
-│     ├─ backup.sh
-│     ├─ restore.sh
-│     └─ health-check.sh
+│  └─ monitoring/
+│     ├─ prometheus/
+│     │  └─ prometheus.yml
+│     │
+│     └─ grafana/
+│        ├─ provisioning/
+│        │  ├─ datasources/
+│        │  │  └─ datasource.yml
+│        │  └─ dashboards/
+│        │     └─ dashboards.yml
+│        │
+│        └─ dashboards/
+│           └─ mini-pc-devops-overview.json
 │
 ├─ nginx/
 │  ├─ conf.d/
@@ -197,11 +190,12 @@ self-hosted-devops-platform
 
 - Repository 안의 `gitlab/` 디렉토리는 구조 표시용 placeholder로 유지한다.
 - 실제 GitLab 운영 데이터는 GitHub Actions workspace가 아니라 Mini PC WSL2 Ubuntu 내부 고정 경로에 저장한다.
-| 경로                         | 역할                              |
-| -------------------------- | ------------------------------- |
-| `/home/<USER>/gitlab/config` | GitLab 설정 파일                    |
+
+| 경로 | 역할 |
+| --- | --- |
+| `/home/<USER>/gitlab/config` | GitLab 설정 파일  |
 | `/home/<USER>/gitlab/data`   | Repository, DB, 업로드 파일 등 실제 데이터 |
-| `/home/<USER>/gitlab/logs`   | GitLab 로그                       |
+| `/home/<USER>/gitlab/logs`   | GitLab 로그 |
 
 ### Nginx runtime 파일 경로
 
@@ -288,7 +282,51 @@ feature/xxx
 | Phase 8 | [monitoring.md](docs/monitoring.md) | Prometheus/Grafana 기반 기본 Monitoring Stack 구성 |
 | Phase 9 | [backup-strategy.md](docs/backup-strategy.md) | GitLab 데이터 백업 및 복구 전략 |
 | 공통 | [troubleshooting.md](docs/troubleshooting.md) | 구축 및 운영 중 발생한 문제와 해결 기록 |
-| 공통 | [optimization.md](docs/optimization.md) | GitLab 및 Docker Desktop 성능 튜닝 기록 |
+
+---
+
+## 운영 가이드 요약
+
+> Mini PC 기반 GitLab / Nginx / Monitoring Stack을 재기동하고 상태를 검증하는 운영 절차
+
+### 운영 대상
+
+- GitLab Container
+- GitLab Runner Container
+- GitHub self-hosted runner
+- Nginx Reverse Proxy
+- Prometheus
+- Grafana
+
+### 재시작 절차
+
+1. Mini PC 부팅
+2. Docker Desktop 실행 확인
+3. WSL2 Ubuntu 상태 확인
+4. GitLab Container 상태 확인
+5. GitLab 서비스 상태 확인
+6. Nginx Reverse Proxy 상태 확인
+7. Monitoring Stack 상태 확인
+8. GitHub self-hosted runner 실행 확인
+9. GitLab Runner 상태 확인
+
+### 정상 기준
+
+- GitLab Web UI 접근 가능
+- `gitlab-ctl status` 주요 서비스 run 상태
+- `https://gitlab.local` 접근 가능
+- Prometheus target UP
+- Grafana dashboard 접근 가능
+- GitHub self-hosted runner Online
+- GitLab Runner Online
+
+### 운영상 주의사항
+
+- GitLab Container 실행만으로 기존 인스턴스 유지 여부를 판단하지 않는다.
+- GitLab DB 상태를 직접 확인한다.
+- `/home/gali/gitlab/data` 삭제 금지
+- `docker compose down -v` 금지
+- `docker system prune --volumes` 금지
 
 ---
 
@@ -525,14 +563,18 @@ GitLab Repository
 ### Phase 9. Backup / 운영 문서화
 
 #### 작업 내용
-- 설치 절차 문서화
-- 백업/복구 절차 문서화
-- 장애 대응 절차 문서화
-- 성능 튜닝 결과 정리
+- GitLab runtime data 백업 대상 정리
+- GitLab Runner 설정 백업 대상 정리
+- Nginx runtime 파일 백업 대상 정리
+- Monitoring runtime 파일 백업 대상 정리
+- 백업 생성 절차 정리
+- 복구 후 GitLab DB 상태 검증 절차 정리
+- 기존 장애 대응 기록을 `troubleshooting.md`에 유지
 
 #### 구현 목표
-- 운영 문서 표준화
-- 장애 대응 절차 확보
-- 성능 최적화 기록 관리
+- GitLab 데이터 유실 대응 기준 확보
+- GitLab DB 재초기화 여부 판단 기준 확보
+- 백업/복구 절차 문서화
+- 운영 중 반복 장애 대응 기준 정리
 
 ---
