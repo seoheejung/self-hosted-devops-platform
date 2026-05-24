@@ -159,7 +159,7 @@ self-hosted-devops-platform
 │  │  └─ grafana/
 │  │     ├─ provisioning/
 │  │     │  ├─ datasources/
-│  │     │  │  └─ prometheus.yml
+│  │     │  │  └─ datasource.yml
 │  │     │  └─ dashboards/
 │  │     │     └─ dashboards.yml
 │  │     │

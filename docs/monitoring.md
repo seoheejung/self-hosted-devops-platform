@@ -95,7 +95,7 @@ self-hosted-devops-platform
 │     └─ grafana/
 │        ├─ provisioning/
 │        │  ├─ datasources/
-│        │  │  └─ prometheus.yml
+│        │  │  └─ datasource.yml
 │        │  └─ dashboards/
 │        │     └─ dashboards.yml
 │        │
@@ -109,7 +109,7 @@ self-hosted-devops-platform
 | ------------------------- | --------------------------------- |
 | `infra/compose/docker-compose.monitoring.yml` | Monitoring Stack Compose 파일|
 | `infra/monitoring/prometheus/prometheus.yml` | Prometheus 설정|
-| `infra/monitoring/grafana/provisioning/datasources/prometheus.yml` | Grafana Prometheus datasource 설정  |
+| `infra/monitoring/grafana/provisioning/datasources/datasource.yml` | Grafana Prometheus datasource 설정  |
 | `infra/monitoring/grafana/provisioning/dashboards/dashboards.yml`  | Grafana dashboard provisioning 설정 |
 | `infra/monitoring/grafana/dashboards/mini-pc-devops-overview.json` | Grafana Dashboard JSON |
 

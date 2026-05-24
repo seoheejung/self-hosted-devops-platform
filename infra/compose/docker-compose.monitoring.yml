@@ -1,0 +1,75 @@
+services:
+  prometheus:
+    # Prometheus Metrics 수집 서버
+    # GitLab 운영 환경의 리소스 상태와 서비스 상태를 수집하는 기준 서버
+    image: prom/prometheus:latest
+
+    # 컨테이너 이름 고정
+    container_name: gitlab-prometheus
+
+    # Host Port : Container Port
+    ports:
+      - "9090:9090"
+
+    volumes:
+      # Prometheus 설정 파일 mount
+      #
+      # GitHub Repository의 infra/monitoring/prometheus/prometheus.yml 파일은
+      # GitHub Actions에서 Mini PC runtime 경로인 /home/gali/monitoring/prometheus/prometheus.yml 로 복사
+      #
+      # Prometheus Container는 GitHub Actions workspace를 직접 참조하지 않고, Mini PC WSL2 내부 고정 runtime 경로 mount
+      - /home/gali/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+      # Prometheus TSDB 데이터 저장 volume
+      # 컨테이너 재생성 후에도 수집 데이터가 유지되도록 named volume 사용
+      - prometheus-data:/prometheus
+
+    command:
+      # Prometheus 설정 파일 경로
+      - "--config.file=/etc/prometheus/prometheus.yml"
+
+      # Prometheus 데이터 저장 경로
+      - "--storage.tsdb.path=/prometheus"
+
+    # 수동 중지가 아닌 경우 자동 재시작
+    restart: unless-stopped
+
+  grafana:
+    # Grafana Dashboard 서버
+    # Prometheus datasource를 연결하고, Mini PC / GitLab 운영 상태를 시각화
+    image: grafana/grafana:latest
+
+    # 컨테이너 이름 고정
+    container_name: gitlab-grafana
+
+    # Host Port : Container Port
+    ports:
+      - "3000:3000"
+
+    volumes:
+      # Grafana 내부 데이터 저장 volume
+      # datasource, dashboard 상태, 플러그인 정보 등을 유지
+      - grafana-data:/var/lib/grafana
+
+      # Grafana provisioning 설정 mount
+      # datasource / dashboard provider 설정을 파일 기반으로 관리
+      # GitHub Actions가 Repository 설정 파일을 /home/gali/monitoring/grafana/provisioning 으로 복사
+      - /home/gali/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+
+      # Grafana dashboard JSON mount
+      # Grafana UI에서 작성한 Dashboard를 JSON으로 export한 뒤 Repository에 저장하고, GitHub Actions가 runtime 경로로 복사
+      - /home/gali/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+    # Prometheus Container 생성 이후 Grafana Container 생성
+    depends_on:
+      - prometheus
+
+    # 수동 중지가 아닌 경우 자동 재시작
+    restart: unless-stopped
+
+volumes:
+  # Prometheus 수집 데이터 저장용 named volume
+  prometheus-data:
+
+  # Grafana 설정 / dashboard 상태 저장용 named volume
+  grafana-data:

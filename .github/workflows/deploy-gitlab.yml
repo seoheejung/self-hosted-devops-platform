@@ -1,27 +1,28 @@
-name: Deploy GitLab to Mini PC
+name: Deploy Monitoring Stack
 
 on:
   push:
     branches:
-      # main 브랜치에 push 또는 PR merge될 때 배포 실행
+      # main 브랜치에 push 또는 PR merge될 때 Monitoring 배포 실행
       - main
     paths:
-      # GitLab / Nginx Docker Compose 파일이 변경된 경우 배포 실행
-      - "infra/compose/docker-compose.gitlab.yml"
+      # Monitoring Compose 파일이 변경된 경우 배포 실행
+      - "infra/compose/docker-compose.monitoring.yml"
 
-      # Nginx Reverse Proxy 설정 파일이 변경된 경우 배포 실행
-      - "nginx/**"
+      # Prometheus / Grafana 설정 파일이 변경된 경우 배포 실행
+      - "infra/monitoring/**"
 
-      # 배포 Workflow 자체가 변경된 경우에도 실행
-      - ".github/workflows/deploy-gitlab.yml"
+      # Monitoring 배포 Workflow 자체가 변경된 경우에도 실행
+      - ".github/workflows/deploy-monitoring.yml"
 
-  # 문서만 변경된 경우에도 필요 시 수동으로 배포/검증 실행
+  # 문서 변경 또는 수동 검증이 필요한 경우 직접 실행
   workflow_dispatch:
 
 jobs:
-  deploy:
+  deploy-monitoring:
     # Mini PC WSL2 Ubuntu에 등록한 GitHub self-hosted runner에서 실행
-    # GitHub-hosted runner가 아니므로 내부망 SSH 접속이 필요 없음
+    # GitHub-hosted runner가 아니므로 내부망 IP와 Docker Desktop 접근이 가능하다.
+    name: Deploy Prometheus and Grafana
     runs-on: self-hosted
 
     steps:
@@ -29,294 +30,164 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # GitLab Container가 사용할 운영 데이터 디렉토리 생성
-      # GitHub Actions workspace 밖의 고정 경로를 사용해 checkout 정리와 무관하게 데이터 유지
+      # Monitoring runtime 파일 준비
       #
-      # /home/gali/gitlab/config : GitLab 설정 파일
-      # /home/gali/gitlab/data   : Repository, DB, 업로드 파일 등 실제 데이터
-      # /home/gali/gitlab/logs   : GitLab 로그
-      - name: Prepare GitLab volume directories
-        run: |
-          mkdir -p /home/gali/gitlab/config
-          mkdir -p /home/gali/gitlab/data
-          mkdir -p /home/gali/gitlab/logs
-
-      # Docker Desktop credential helper가 GitHub Actions runner 세션에서 실패하는 문제 방지
-      # GitLab CE public image pull에는 Docker Hub 인증이 필요하지 않으므로 credential store를 사용하지 않음
-      - name: Reset Docker credential config
-        run: |
-          mkdir -p ~/.docker
-          cat > ~/.docker/config.json <<'EOF'
-          {
-            "auths": {}
-          }
-          EOF
-
-      # Nginx Reverse Proxy runtime 파일 준비
-      #
-      # GitHub Repository의 nginx/ 설정 파일은 원본이다.
-      # 실제 Nginx Container에는 Mini PC 고정 경로인 /home/gali/nginx 를 mount한다.
+      # GitHub Repository의 infra/monitoring/ 하위 파일은 원본 설정 파일이다.
+      # 실제 Prometheus / Grafana Container에는 Mini PC 고정 경로인 /home/gali/monitoring 을 mount한다.
       #
       # GitHub Actions workspace 경로를 직접 mount하지 않는 이유:
       #   GitHub Actions workspace는 checkout / cleanup / runner 작업 상태에 따라 달라질 수 있음
-      #   Nginx runtime 파일은 Mini PC WSL2 내부 고정 경로에 두는 것이 운영상 안정적임
+      #   Monitoring runtime 파일은 Mini PC WSL2 내부 고정 경로에 두는 것이 운영상 안정적임
       #
       # 생성 / 복사 대상:
-      #   /home/gali/nginx/nginx.conf
-      #   /home/gali/nginx/conf.d/gitlab.conf
-      #   /home/gali/nginx/ssl/gitlab.local.crt
-      #   /home/gali/nginx/ssl/gitlab.local.key
+      #   /home/gali/monitoring/prometheus/prometheus.yml
+      #   /home/gali/monitoring/grafana/provisioning/datasources/datasource.yml
+      #   /home/gali/monitoring/grafana/provisioning/dashboards/dashboards.yml
+      #   /home/gali/monitoring/grafana/dashboards/mini-pc-devops-overview.json
       #
-      # 인증서 파일:
-      #   Git에 커밋하지 않음
-      #   없으면 self-hosted runner 실행 중 자체 서명 인증서로 생성
-      - name: Prepare Nginx runtime files
+      # Dashboard JSON:
+      #   초기에는 파일이 없을 수 있으므로 존재할 때만 복사한다.
+      #   Grafana UI에서 Dashboard 작성 후 export하여 Repository에 저장한다.
+      - name: Prepare Monitoring runtime files
         run: |
-          mkdir -p /home/gali/nginx/conf.d
-          mkdir -p /home/gali/nginx/ssl
+          mkdir -p /home/gali/monitoring/prometheus
+          mkdir -p /home/gali/monitoring/grafana/provisioning/datasources
+          mkdir -p /home/gali/monitoring/grafana/provisioning/dashboards
+          mkdir -p /home/gali/monitoring/grafana/dashboards
 
-          cp nginx/nginx.conf /home/gali/nginx/nginx.conf
-          cp nginx/conf.d/gitlab.conf /home/gali/nginx/conf.d/gitlab.conf
+          cp infra/monitoring/prometheus/prometheus.yml \
+            /home/gali/monitoring/prometheus/prometheus.yml
 
-          if [ ! -f /home/gali/nginx/ssl/gitlab.local.crt ] || [ ! -f /home/gali/nginx/ssl/gitlab.local.key ]; then
-            openssl req -x509 -nodes -days 365 \
-              -newkey rsa:2048 \
-              -keyout /home/gali/nginx/ssl/gitlab.local.key \
-              -out /home/gali/nginx/ssl/gitlab.local.crt \
-              -subj "/CN=gitlab.local"
+          cp infra/monitoring/grafana/provisioning/datasources/datasource.yml \
+            /home/gali/monitoring/grafana/provisioning/datasources/datasource.yml
+
+          cp infra/monitoring/grafana/provisioning/dashboards/dashboards.yml \
+            /home/gali/monitoring/grafana/provisioning/dashboards/dashboards.yml
+
+          if [ -f infra/monitoring/grafana/dashboards/mini-pc-devops-overview.json ]; then
+            cp infra/monitoring/grafana/dashboards/mini-pc-devops-overview.json \
+              /home/gali/monitoring/grafana/dashboards/mini-pc-devops-overview.json
           fi
 
-          ls -l /home/gali/nginx
-          ls -l /home/gali/nginx/conf.d
-          ls -l /home/gali/nginx/ssl
+          ls -R /home/gali/monitoring
 
-      # 8080 포트 사전 조건 확인
+      # Monitoring Compose 설정 검증
       #
-      # 8080 예약 해제는 GitHub Actions 안에서 처리하지 않는다.
-      # Actions Job 내부에서 WinNAT을 중지하면 self-hosted runner의 GitHub 연결이 끊길 수 있다.
+      # docker compose config:
+      #   Compose 파일 문법, volume mount, port publish, service 정의를 검증한다.
       #
-      # 8080 예약 해제는 Windows Scheduled Task에서 실행하는
-      # D:\DEV\prepare-github-runner.ps1 이 담당한다.
+      # -p monitoring:
+      #   GitLab Compose와 Monitoring Compose가 같은 infra/compose 디렉토리에 있으므로
+      #   기본 project name이 겹치지 않도록 Monitoring 전용 project name을 명시한다.
       #
-      # 이 step은 현재 runner 실행 환경에서 8080이 Windows excluded port range에 남아 있는지만 확인한다.
-      # 8080이 아직 예약되어 있으면 배포 전에 실패시켜 원인을 명확히 한다.
-      - name: Verify Windows port 8080 is available
-        shell: bash
+      # 정상 기준:
+      #   prometheus service 출력
+      #   grafana service 출력
+      #   prometheus-data volume 출력
+      #   grafana-data volume 출력
+      - name: Validate Monitoring compose config
         run: |
-          set -euo pipefail
+          docker compose -p monitoring -f infra/compose/docker-compose.monitoring.yml config
 
-          TARGET_PORT=8080
-
-          echo "Checking Windows excluded TCP port ranges..."
-          RANGES_RAW=$(timeout 30s cmd.exe /c "netsh interface ipv4 show excludedportrange protocol=tcp")
-          RANGES=$(printf "%s" "$RANGES_RAW" | tr -d '\r')
-
-          echo "$RANGES"
-
-          MATCHED_RANGE=$(printf "%s\n" "$RANGES" | awk -v port="$TARGET_PORT" '
-            $1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ {
-              start=$1
-              end=$2
-
-              if (port >= start && port <= end) {
-                print start " " end
-                exit
-              }
-            }
-          ')
-
-          if [ -n "$MATCHED_RANGE" ]; then
-            echo "Port ${TARGET_PORT} is still reserved in Windows excluded port range: ${MATCHED_RANGE}"
-            echo "Run D:\\DEV\\prepare-github-runner.ps1 through the scheduled task before running this workflow."
-            exit 1
-          fi
-
-          echo "Port ${TARGET_PORT} is not reserved by Windows excluded port range."
-
-      # Mini PC WSL2 Ubuntu 내부에서 Docker Compose로 GitLab / Nginx Container 실행
+      # Prometheus / Grafana Container 배포
       #
-      # 기존 gitlab Container 또는 gitlab-nginx Container가 Created / Exited / 잘못된 port publish 상태로
-      # 남아 있을 수 있으므로 배포 전에 기존 Container를 먼저 제거한다.
+      # 기존 Monitoring Container가 Created / Exited / 잘못된 port publish 상태로
+      # 남아 있을 수 있으므로 배포 전에 기존 Container를 제거한다.
       #
-      # docker rm -f gitlab:
-      #   기존 gitlab Container 제거
-      #   /home/gali/gitlab 하위 bind mount 데이터는 삭제하지 않음
+      # docker rm -f gitlab-prometheus:
+      #   기존 Prometheus Container 제거
+      #   prometheus-data named volume은 삭제하지 않음
       #
-      # docker rm -f gitlab-nginx:
-      #   기존 Nginx Reverse Proxy Container 제거
-      #   /home/gali/nginx 하위 runtime 파일은 삭제하지 않음
+      # docker rm -f gitlab-grafana:
+      #   기존 Grafana Container 제거
+      #   grafana-data named volume은 삭제하지 않음
       #
       # docker compose up -d:
-      #   docker-compose.gitlab.yml 정의 기준으로 GitLab Container와 Nginx Container 재생성
+      #   docker-compose.monitoring.yml 정의 기준으로 Prometheus / Grafana Container 생성
+      #
+      # -p monitoring:
+      #   GitLab Compose project와 분리하기 위한 Monitoring 전용 project name
       #
       # --remove-orphans:
-      #   현재 Compose 파일에 없는 orphan Container 정리
-      #
-      # MINI_PC_HOST:
-      #   GitLab external_url에 사용할 Mini PC 내부 IP
+      #   monitoring project 기준으로 현재 Compose 파일에 없는 orphan Container 정리
       #
       # docker ps:
       #   컨테이너 실행 상태 확인
       #
-      # docker port gitlab:
-      #   GitLab Container의 Host Port publish 상태 확인
+      # docker port gitlab-prometheus:
+      #   Prometheus 9090 포트 publish 상태 확인
       #
-      # docker port gitlab-nginx:
-      #   Nginx Container의 Host Port publish 상태 확인
-      - name: Deploy GitLab and Nginx containers
-        env:
-          MINI_PC_HOST: ${{ secrets.MINI_PC_HOST }}
+      # docker port gitlab-grafana:
+      #   Grafana 3000 포트 publish 상태 확인
+      - name: Deploy Monitoring containers
         run: |
-          docker rm -f gitlab || true
-          docker rm -f gitlab-nginx || true
-          docker compose -f infra/compose/docker-compose.gitlab.yml up -d --remove-orphans
+          docker rm -f gitlab-prometheus || true
+          docker rm -f gitlab-grafana || true
+          docker compose -p monitoring -f infra/compose/docker-compose.monitoring.yml up -d --remove-orphans
           docker ps
-          docker port gitlab
-          docker port gitlab-nginx
+          docker port gitlab-prometheus
+          docker port gitlab-grafana
 
-      # GitLab Web UI 접근용 Host 8080 → Container 80 포트 publish 확인
+      # Prometheus 접근용 Host 9090 → Container 9090 포트 publish 확인
       #
       # 정상 기준:
-      #   docker port gitlab 80
-      #   0.0.0.0:8080
+      #   docker port gitlab-prometheus 9090
+      #   0.0.0.0:9090
       #
-      # GitLab 부팅 중에는 curl 결과가 502일 수 있으므로,
-      # 여기서는 curl 실패를 즉시 실패 처리하지 않고 로그만 남긴다.
-      - name: Verify GitLab published ports
+      # Main PC 접근 주소:
+      #   http://172.30.1.67:9090
+      - name: Verify Prometheus published port
         run: |
-          docker port gitlab
+          docker port gitlab-prometheus
 
-          if ! docker port gitlab 80 | grep -q ":8080"; then
-            echo "GitLab HTTP port 8080 is not published"
+          if ! docker port gitlab-prometheus 9090 | grep -q ":9090"; then
+            echo "Prometheus port 9090 is not published"
             exit 1
           fi
 
-          curl -I --max-time 10 http://127.0.0.1:8080 || true
-
-      # Nginx Reverse Proxy 접근용 Host 80 / 443 포트 publish 확인
+      # Grafana 접근용 Host 3000 → Container 3000 포트 publish 확인
       #
       # 정상 기준:
-      #   docker port gitlab-nginx 80
-      #   0.0.0.0:80
+      #   docker port gitlab-grafana 3000
+      #   0.0.0.0:3000
       #
-      #   docker port gitlab-nginx 443
-      #   0.0.0.0:443
-      - name: Verify Nginx published ports
+      # Main PC 접근 주소:
+      #   http://172.30.1.67:3000
+      - name: Verify Grafana published port
         run: |
-          docker port gitlab-nginx
+          docker port gitlab-grafana
 
-          if ! docker port gitlab-nginx 80 | grep -q ":80"; then
-            echo "Nginx HTTP port 80 is not published"
+          if ! docker port gitlab-grafana 3000 | grep -q ":3000"; then
+            echo "Grafana port 3000 is not published"
             exit 1
           fi
 
-          if ! docker port gitlab-nginx 443 | grep -q ":443"; then
-            echo "Nginx HTTPS port 443 is not published"
-            exit 1
-          fi
-
-      # Nginx Reverse Proxy 설정 문법 확인
+      # Prometheus HTTP readiness 확인
+      #
+      # localhost 기준으로 self-hosted runner에서 Prometheus Container publish port에 접근한다.
       #
       # 정상 기준:
-      #   nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
-      #   nginx: configuration file /etc/nginx/nginx.conf test is successful
-      - name: Verify Nginx config
+      #   HTTP 200 응답
+      #
+      # 실패 시 확인 대상:
+      #   prometheus.yml 문법
+      #   /home/gali/monitoring/prometheus/prometheus.yml mount 여부
+      #   gitlab-prometheus Container 로그
+      - name: Verify Prometheus HTTP endpoint
         run: |
-          docker exec gitlab-nginx nginx -t
+          curl -f -I --max-time 10 http://127.0.0.1:9090/-/ready
 
-      # Nginx HTTP → HTTPS redirect 확인
+      # Grafana HTTP health 확인
+      #
+      # localhost 기준으로 self-hosted runner에서 Grafana Container publish port에 접근한다.
       #
       # 정상 기준:
-      #   HTTP/1.1 301 Moved Permanently
-      #   또는 HTTP/1.1 308 Permanent Redirect
+      #   HTTP 200 응답
       #
-      # 이 검증은 localhost 기준으로 Nginx Container의 80번 포트 publish 상태와
-      # gitlab.conf의 redirect 설정을 확인한다.
-      - name: Verify Nginx HTTPS redirect
+      # 실패 시 확인 대상:
+      #   Grafana provisioning mount 경로
+      #   grafana-data volume 상태
+      #   gitlab-grafana Container 로그
+      - name: Verify Grafana HTTP endpoint
         run: |
-          curl -I --max-time 10 http://127.0.0.1 | grep -E "301|308"
-
-      # GitLab Container 재배포 후 runtime volume이 기존 고정 경로를 유지하는지 확인
-      #
-      # 이 검증은 GitLab 재시작 후 프로젝트 / Runner 정보가 사라지는 문제를 방지하기 위한 확인 단계
-      #
-      # 정상 기준:
-      #   /home/gali/gitlab/config → /etc/gitlab
-      #   /home/gali/gitlab/logs   → /var/log/gitlab
-      #   /home/gali/gitlab/data   → /var/opt/gitlab
-      - name: Verify GitLab volume mounts
-        run: |
-          docker inspect gitlab --format '{{json .Mounts}}' | python3 -m json.tool
-
-      # GitLab 주요 서비스가 정상 기동될 때까지 대기
-      #
-      # GitLab은 Container 시작 직후 runsv not running 상태가 잠시 발생할 수 있음
-      # puma / postgresql / sidekiq / nginx가 run 상태가 될 때까지 최대 5분 대기
-      - name: Wait for GitLab services
-        run: |
-          for i in {1..30}; do
-            if docker exec gitlab gitlab-ctl status | grep -q "run: puma" && \
-               docker exec gitlab gitlab-ctl status | grep -q "run: postgresql" && \
-               docker exec gitlab gitlab-ctl status | grep -q "run: sidekiq" && \
-               docker exec gitlab gitlab-ctl status | grep -q "run: nginx"; then
-              echo "GitLab core services are running"
-              exit 0
-            fi
-
-            echo "Waiting for GitLab services... ($i/30)"
-            sleep 10
-          done
-
-          docker exec gitlab gitlab-ctl status
-          exit 1
-
-      # GitLab DB 기준으로 Phase 4에서 생성한 테스트 프로젝트와 Runner 등록 정보가 유지되는지 확인
-      #
-      # gitlab-rails runner는 Rails 전체 앱을 로딩하므로 Mini PC 환경에서 메모리 사용량이 크다.
-      # exit code 137이 발생할 수 있으므로 PostgreSQL 직접 조회 방식으로 검증한다.
-      #
-      # projects=0:
-      #   GitLab 프로젝트 데이터가 사라졌거나 다른 volume을 보고 있을 가능성
-      #
-      # runners=0:
-      #   GitLab Runner 등록 정보가 사라졌거나 GitLab DB가 초기화되었을 가능성
-      #
-      # 정상 기준:
-      #   PROJECT_COUNT >= 1
-      #   RUNNER_COUNT >= 1
-      - name: Verify GitLab persistent data
-        run: |
-          echo "Checking GitLab projects from PostgreSQL..."
-
-          docker exec gitlab gitlab-psql -d gitlabhq_production -t -A -c "
-            SELECT
-              p.id || ' ' || n.path || '/' || p.path
-            FROM projects p
-            JOIN namespaces n ON p.namespace_id = n.id
-            ORDER BY p.id;
-          " || true
-
-          echo "Checking GitLab runners from PostgreSQL..."
-
-          docker exec gitlab gitlab-psql -d gitlabhq_production -t -A -c "
-            SELECT
-              id || ' ' || COALESCE(description, '')
-            FROM ci_runners
-            ORDER BY id;
-          " || true
-
-          PROJECT_COUNT=$(docker exec gitlab gitlab-psql -d gitlabhq_production -t -A -c "SELECT COUNT(*) FROM projects;" | tr -d '[:space:]')
-          RUNNER_COUNT=$(docker exec gitlab gitlab-psql -d gitlabhq_production -t -A -c "SELECT COUNT(*) FROM ci_runners;" | tr -d '[:space:]')
-
-          echo "PROJECT_COUNT=${PROJECT_COUNT}"
-          echo "RUNNER_COUNT=${RUNNER_COUNT}"
-
-          if [ "${PROJECT_COUNT}" -lt 1 ]; then
-            echo "GitLab project data is missing"
-            exit 1
-          fi
-
-          if [ "${RUNNER_COUNT}" -lt 1 ]; then
-            echo "GitLab runner registration data is missing"
-            exit 1
-          fi
+          curl -f -I --max-time 10 http://127.0.0.1:3000/api/health
