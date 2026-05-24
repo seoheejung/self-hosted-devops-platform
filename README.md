@@ -102,8 +102,7 @@ Reverse Proxy, HTTPS, Monitoring, Backup, 장애 대응으로 확장 가능한 S
  └─ GitLab 운영 안정성 검증
 
 [ Extended DevOps Platform ]
- ├─ Prometheus
- ├─ Grafana
+ ├─ Prometheus / Grafana Monitoring
  ├─ Backup / Restore
  └─ Deployment Target
 ```
@@ -146,29 +145,31 @@ self-hosted-devops-platform
 ├─ infra/
 │  ├─ docker/
 │  │  ├─ gitlab/
-│  │  ├─ nginx/
-│  │  ├─ prometheus/
-│  │  └─ grafana/
+│  │  └─ nginx/
 │  │
 │  ├─ compose/
 │  │  ├─ docker-compose.gitlab.yml
 │  │  ├─ docker-compose.monitoring.yml
 │  │  └─ docker-compose.full.yml
 │  │
+│  ├─ monitoring/
+│  │  ├─ prometheus/
+│  │  │  └─ prometheus.yml
+│  │  │
+│  │  └─ grafana/
+│  │     ├─ provisioning/
+│  │     │  ├─ datasources/
+│  │     │  │  └─ datasource.yml
+│  │     │  └─ dashboards/
+│  │     │     └─ dashboards.yml
+│  │     │
+│  │     └─ dashboards/
+│  │        └─ mini-pc-devops-overview.json
+│  │
 │  └─ scripts/
 │     ├─ backup.sh
 │     ├─ restore.sh
 │     └─ health-check.sh
-│
-├─ monitoring/
-│  ├─ prometheus/
-│  │  └─ prometheus.yml
-│  │
-│  ├─ grafana/
-│  │  ├─ dashboards/
-│  │  └─ provisioning/
-│  │
-│  └─ exporters/
 │
 ├─ nginx/
 │  ├─ conf.d/
@@ -476,11 +477,12 @@ GitLab Repository
 ### Phase 8. Monitoring 구성
 
 #### 작업 내용
-- Prometheus 구성
-- Grafana 구성
-- Docker Container 리소스 수집
-- GitLab 상태 수집
-- Dashboard 작성
+- Prometheus Metrics 수집 구성
+- Grafana Dashboard 구성
+- Resource Monitoring 구성
+- GitLab 상태 시각화
+- 장애 탐지 및 로그 분석 기준 정리
+- Alert 구성 필요 여부 검토
 
 #### 수집 대상
 - Windows Host 리소스
@@ -491,9 +493,10 @@ GitLab Repository
 - Nginx 상태
 
 #### 구현 목표
-- Grafana Dashboard 구성
-- Resource Monitoring
-- Alert 기준 설계
+- Mini PC 운영 상태를 Grafana에서 확인
+- GitLab / Runner / Nginx 상태를 시각화
+- 장애 발생 시 확인할 Metrics와 Log 기준 정리
+- Alert 적용 여부 판단
 
 ---
 

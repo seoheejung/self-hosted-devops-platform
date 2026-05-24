@@ -278,3 +278,5 @@ Phase 6 GitLab 운영 안정성 검증은 수행 완료했다.
 결과는 운영 안정성 통과가 아니라, 장기 미가동 후 GitLab DB 재초기화 문제가 확인된 상태다.
 
 현재 Mini PC WSL2 + Docker Desktop 환경에서는 GitLab Omnibus 장기 운영을 확정하지 않는다.
+
+---

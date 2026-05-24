@@ -1,0 +1,16 @@
+global:
+  # Prometheus가 target을 scrape 하는 기본 주기
+  scrape_interval: 15s
+
+  # rule evaluation 기본 주기
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Prometheus 자체 상태 수집
+  # /targets 화면에서 prometheus target이 UP이면 Prometheus 설정 파일 로드와 scrape 동작이 정상
+  - job_name: prometheus
+    static_configs:
+      - targets:
+          # Docker Compose 내부 service 이름 기준 접근
+          # prometheus Container 내부에서 자기 자신을 prometheus:9090 으로 scrape
+          - prometheus:9090

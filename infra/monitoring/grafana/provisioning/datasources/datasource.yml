@@ -1,0 +1,20 @@
+apiVersion: 1
+
+datasources:
+  # Prometheus datasource 자동 등록
+  # Grafana 최초 실행 시 UI에서 수동 등록하지 않고, 이 파일을 기준으로 Prometheus datasource를 생성
+  - name: Prometheus
+
+    # Grafana datasource type
+    type: prometheus
+
+    # Grafana backend가 datasource에 접근하는 방식
+    # proxy는 브라우저가 직접 Prometheus에 접근하지 않고 Grafana server가 대신 접근
+    access: proxy
+
+    # Docker Compose 내부 service 이름 기준 Prometheus 접근 주소
+    # Grafana Container에서 Prometheus Container로 접근할 때 사용
+    url: http://prometheus:9090
+
+    # 기본 datasource로 지정
+    isDefault: true
