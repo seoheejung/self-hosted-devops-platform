@@ -261,6 +261,6 @@ Mini PC Services
 1. GitLab Runner 기반 Pipeline 검증을 완료했다.
 2. GitLab 운영 안정성을 검증했고, 장기 미가동 후 재기동 시 DB 재초기화 문제가 확인됐다.
 3. Nginx Reverse Proxy와 내부망 HTTPS 접근 구조를 구성했다.
-4. Prometheus / Grafana 기본 Monitoring Stack을 구성하고, Prometheus 자체 상태 Dashboard를 작성한다.
+4. Prometheus / Grafana 기본 Monitoring Stack을 구성하고, Prometheus 자체 상태 Dashboard를 작성했다.
 
 이후 확장 시 Docker Container Metrics, GitLab 상태 Metrics, Runner 상태, Nginx 접근 상태 probe, Backup / Restore 절차를 별도 단계로 검토한다.

@@ -1,4 +1,4 @@
-# troubleshooting
+# Troubleshooting
 
 > Self-Hosted DevOps Platform 구축 과정에서 발생한 문제와 원인, 해결 절차를 기록한다.
 
